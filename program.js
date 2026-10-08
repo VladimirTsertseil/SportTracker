@@ -1,5 +1,5 @@
 window.PROGRAM_116 = {
-  version: '10-09-2026',
+  version: '08-10-2026',
   nextRoutine: 'B',
   rules: {
     mainRIR: '1–2',
@@ -110,7 +110,7 @@ window.PROGRAM_116 = {
       {
         name:'Тяга нижнего блока сидя на полу',
         plan:'3×10–15 · цель RIR 1–2',
-        sets:3,t:[10,10,10]
+        sets:3,t:[10,10,10],unit:'divisions'
       },
       {
         name:'Отжимания на брусьях',
