@@ -48,7 +48,7 @@ restAudio.addEventListener('pause', () => {
 });
 
 const STORAGE='tracker116-state-v1', HISTORY='tracker116-history-v1', SOUND_PREF='tracker116-sound-v1', PENDING='tracker116-pending-finish-v1';
-function mk(k){return{ex:0,set:0,edit:false,items:P[k].map(x=>({rir:'',tech:'',note:'',sets:Array.from({length:x.sets},(_,i)=>({weight:i===0?(x.w||''):'',reps:String(x.t[i]??''),done:false}))}))}}
+function mk(k){return{ex:0,set:0,edit:false,items:P[k].map(x=>({rir:'',tech:'',note:'',sets:Array.from({length:x.sets},(_,i)=>({weight:(x.w||''),reps:String(x.t[i]??''),done:false}))}))}}
 function fresh(){return{S:{A:mk('A'),B:mk('B'),C:mk('C')},R:(PROGRAM.nextRoutine||'A'),started:null,finished:null,restEnd:null,programVersion:PROGRAM.version}}
 function load(){try{const x=JSON.parse(localStorage.getItem(STORAGE));if(!x||x.programVersion!==PROGRAM.version)return fresh();return x}catch(e){return fresh()}}
 let state=load(),S=state.S,R=state.R,started=state.started,finished=state.finished,restEnd=state.restEnd;
