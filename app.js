@@ -47,11 +47,111 @@ restAudio.addEventListener('pause', () => {
   if (restAudio.currentTime === 0 || restAudio.ended) leaveTransientAudioSession();
 });
 
+// Разминка не является упражнением и не участвует в статистике.
+const WARMUP_PLANS = {
+  A: {
+    duration:'10–12 мин',dynamicTime:'4 мин',
+    dynamic:[
+      'Круги руками — 15 вперёд + 15 назад',
+      'Повороты грудного отдела — 8 на сторону',
+      'Лопаточные отжимания — 10',
+      'Лопаточные подтягивания — 6–8'
+    ],
+    ramps:[
+      ['Жим штанги лёжа','20 кг × 10 → 40 кг × 6 → 60 кг × 3 → 72,5 кг × 1–2'],
+      ['Перед рабочими подтягиваниями','1 лёгкий подход × 2–3']
+    ]
+  },
+  B: {
+    duration:'10–12 мин',dynamicTime:'4–5 мин',
+    dynamic:[
+      'Приседания без веса — 12',
+      'Выпады назад — 6 на каждую ногу',
+      'Наклоны с отведением таза назад (hip hinge) — 10',
+      'Колено к стене (голеностоп) — 8 на каждую ногу'
+    ],
+    ramps:[
+      ['Приседания со штангой','20 кг × 10 → 40 кг × 6 → 55 кг × 3 → 65 кг × 1–2'],
+      ['Перед болгарскими выпадами','5 повторений без гантели на каждую ногу'],
+      ['Перед румынской тягой','20 кг × 8 → 40 кг × 4–5']
+    ]
+  },
+  C: {
+    duration:'9–11 мин',dynamicTime:'4 мин',
+    dynamic:[
+      'Скольжения руками по стене (wall slides) — 10',
+      'Перекрёстные махи руками — 20',
+      'Лопаточные отжимания — 10',
+      'Лопаточные подтягивания — 6–8'
+    ],
+    ramps:[
+      ['Наклонный жим штанги ≈30°','20 кг × 10 → 35 кг × 6 → 50 кг × 3 → 57,5 кг × 1–2'],
+      ['Перед подтягиваниями','2–3 лёгких повторения'],
+      ['Перед отжиманиями на брусьях','3–5 лёгких повторений в комфортной амплитуде']
+    ]
+  }
+};
+// Отдельный ключ сохраняет совместимость с форматом существующих тренировок.
+const WARMUP_STORAGE='tracker116-warmup-session-v1';
+
 const STORAGE='tracker116-state-v1', HISTORY='tracker116-history-v1', SOUND_PREF='tracker116-sound-v1', PENDING='tracker116-pending-finish-v1';
 function mk(k){return{ex:0,set:0,edit:false,items:P[k].map(x=>({rir:'',tech:'',note:'',sets:Array.from({length:x.sets},(_,i)=>({weight:(x.w||''),reps:String(x.t[i]??''),done:false}))}))}}
 function fresh(){return{S:{A:mk('A'),B:mk('B'),C:mk('C')},R:(PROGRAM.nextRoutine||'A'),started:null,finished:null,restEnd:null,programVersion:PROGRAM.version}}
 function load(){try{const x=JSON.parse(localStorage.getItem(STORAGE));if(!x||x.programVersion!==PROGRAM.version)return fresh();return x}catch(e){return fresh()}}
 let state=load(),S=state.S,R=state.R,started=state.started,finished=state.finished,restEnd=state.restEnd;
+// Отметки A/B/C относятся только к текущей сессии (started — её идентификатор).
+function readWarmupSession(sessionStarted){
+  if(!sessionStarted)return {A:false,B:false,C:false};
+  try{
+    const x=JSON.parse(localStorage.getItem(WARMUP_STORAGE)||'null');
+    if(x && x.started===sessionStarted && x.done && typeof x.done==='object'){
+      return {A:!!x.done.A,B:!!x.done.B,C:!!x.done.C};
+    }
+  }catch(e){}
+  return {A:false,B:false,C:false};
+}
+let warmupDone=readWarmupSession(started);
+function saveWarmupSession(){
+  if(started && !finished){
+    try{localStorage.setItem(WARMUP_STORAGE,JSON.stringify({started,done:warmupDone}))}catch(e){}
+  }else{
+    try{localStorage.removeItem(WARMUP_STORAGE)}catch(e){}
+  }
+}
+function clearWarmupSession(){
+  warmupDone={A:false,B:false,C:false};
+  try{localStorage.removeItem(WARMUP_STORAGE)}catch(e){}
+}
+function renderWarmup(){
+  const p=WARMUP_PLANS[R];
+  $('#warmupTitle').textContent='Разминка · '+p.duration;
+  $('#warmupDynamicTime').textContent=p.dynamicTime;
+  const dynamics=$('#warmupDynamic');
+  dynamics.replaceChildren(...p.dynamic.map(s=>{
+    const li=document.createElement('li');li.textContent=s;return li;
+  }));
+  const ramps=$('#warmupRamps');
+  ramps.replaceChildren(...p.ramps.map(([title,steps])=>{
+    const item=document.createElement('div');
+    const heading=document.createElement('div');heading.className='warmup-ramp-title';heading.textContent=title;
+    const content=document.createElement('div');content.className='warmup-ramp-steps';content.textContent=steps;
+    item.append(heading,content);return item;
+  }));
+  const isDone=!!warmupDone[R];
+  $('#warmupDone').checked=isDone;
+  $('#warmupDone').disabled=!(started&&!finished);
+  $('#warmupState').classList.toggle('hidden',!isDone);
+  $('#warmupHint').textContent=(started&&!finished)
+    ? 'Разминочные веса — ориентиры, без отказа; при изменении рабочих весов их следует пересмотреть.'
+    : 'Начни тренировку, чтобы отметить разминку. Разминочные веса — ориентиры, без отказа; при изменении рабочих весов их следует пересмотреть.';
+}
+document.getElementById('warmupDone').addEventListener('change',e=>{
+  if(!started||finished){e.target.checked=false;return;}
+  warmupDone[R]=e.target.checked;
+  saveWarmupSession();
+  renderWarmup();
+});
+
 let pendingFinish=null;
 try{pendingFinish=JSON.parse(localStorage.getItem(PENDING))||null}catch(e){pendingFinish=null}
 let timer=null,restSec=120,restRun=!!(restEnd&&restEnd>Date.now()),signaled=false;
@@ -115,6 +215,7 @@ function resetLiveWorkout(preserveRoutine=true){
   S={A:mk('A'),B:mk('B'),C:mk('C')};
   R=keepR;
   started=null;finished=null;restEnd=null;restSec=120;restRun=false;signaled=false;
+  clearWarmupSession();
   clearTimerLoop();
   clock.textContent='00:00:00';
   rclock.textContent='02:00';
@@ -133,6 +234,7 @@ function beginWorkout(){
   }
   started=Date.now();
   finished=null;
+  clearWarmupSession();
   restRun=false;restEnd=null;restSec=120;signaled=false;
   clearTimerLoop();
   timer=setInterval(tick,250);
@@ -153,7 +255,7 @@ function startRest(){restSec=120;restEnd=Date.now()+120000;
   scheduleRestPush(Math.max(1,Math.round((restEnd-Date.now())/1000)));restRun=true;signaled=false;if(restControls)restControls.style.display='flex';if(!timer)timer=setInterval(tick,250);tick();persist()}
 function adjust(d){if(!restRun||!restEnd)return;restEnd=Math.max(Date.now(),restEnd+d*1000);tick();persist()}
 function skip(){if(!restRun)return;restRun=false;restEnd=null;restSec=0;rclock.textContent='00:00';rlabel.textContent='Отдых закончен';if(restControls)restControls.style.display='none';persist()}
-function render(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex],s=item.sets[r.set];root.querySelectorAll('[data-routine]').forEach(b=>b.classList.toggle('active',b.dataset.routine===R));meta.textContent=`${r.ex+1}/${P[R].length} · подход ${r.set+1}/${p.sets}`;name.textContent=p.name;plan.textContent=p.plan;warm.textContent=p.warm||'';warm.style.display=p.warm?'block':'none';repLabel.textContent=p.label||'Повторы';weightLabel.textContent=(p.unit==='divisions')?'Деления':'Вес, кг';tabs.innerHTML='';item.sets.forEach((st,i)=>{const b=document.createElement('button');b.type='button';b.className='setbtn'+(i===r.set?' active':'');b.textContent=(st.done?'✓':'')+(i+1);b.addEventListener('click',()=>{saveFields();r.set=i;r.edit=st.done;persist();render()});tabs.appendChild(b)});weight.value=s.weight||'';reps.value=s.reps||'';rir.value=item.rir||'';tech.value=item.tech||'';note.value=item.note||'';done.textContent=r.edit?'Сохранить':'✓ Готово';$('#prev').disabled=r.ex===0;$('#next').disabled=r.ex===P[R].length-1;$('#prev').classList.toggle('disabled',r.ex===0);$('#next').classList.toggle('disabled',r.ex===P[R].length-1);tick();syncLifecycleUI();syncEditedBadge();}
+function render(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex],s=item.sets[r.set];root.querySelectorAll('[data-routine]').forEach(b=>b.classList.toggle('active',b.dataset.routine===R));meta.textContent=`${r.ex+1}/${P[R].length} · подход ${r.set+1}/${p.sets}`;name.textContent=p.name;plan.textContent=p.plan;warm.textContent=p.warm||'';warm.style.display=p.warm?'block':'none';repLabel.textContent=p.label||'Повторы';weightLabel.textContent=(p.unit==='divisions')?'Деления':'Вес, кг';tabs.innerHTML='';item.sets.forEach((st,i)=>{const b=document.createElement('button');b.type='button';b.className='setbtn'+(i===r.set?' active':'');b.textContent=(st.done?'✓':'')+(i+1);b.addEventListener('click',()=>{saveFields();r.set=i;r.edit=st.done;persist();render()});tabs.appendChild(b)});weight.value=s.weight||'';reps.value=s.reps||'';rir.value=item.rir||'';tech.value=item.tech||'';note.value=item.note||'';done.textContent=r.edit?'Сохранить':'✓ Готово';$('#prev').disabled=r.ex===0;$('#next').disabled=r.ex===P[R].length-1;$('#prev').classList.toggle('disabled',r.ex===0);$('#next').classList.toggle('disabled',r.ex===P[R].length-1);tick();syncLifecycleUI();syncEditedBadge();renderWarmup();}
 $('#setForm').addEventListener('submit',e=>{e.preventDefault();unlockSound();const r=S[R],c=cur(),w=weight.value.trim().replace(',','.'),rp=reps.value.trim();if(w&&(!Number.isFinite(Number(w))||Number(w)<0)){status.textContent='Проверь вес';weight.focus();return}if(rp&&(!Number.isFinite(Number(rp))||Number(rp)<0)){status.textContent='Проверь значение';reps.focus();return}c.set.weight=w;c.set.reps=rp;c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();if(r.edit){c.set.done=true;r.edit=false;status.textContent='Подход сохранён';persist();render();return}if(!started||finished){status.textContent='Сначала нажми «Начать тренировку»';return}c.set.done=true;startRest();if(r.set+1<c.item.sets.length){const n=c.item.sets[r.set+1];if(!n.done){n.weight=w;n.reps=rp}r.set++}status.textContent='Подход выполнен';persist();render()});
 root.querySelectorAll('[data-routine]').forEach(b=>b.addEventListener('click',()=>{
   const nextR=b.dataset.routine;
@@ -666,7 +768,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 // --- PWA update controls v1.3 ---
-const TRACKER_APP_VERSION = '2.0';
+const TRACKER_APP_VERSION = '2.1';
 
 async function forceTrackerUpdate() {
   const btn = document.getElementById('trackerUpdateBtn');
