@@ -97,9 +97,11 @@ const WARMUP_STORAGE='tracker116-warmup-session-v1';
 const STORAGE='tracker116-state-v1', HISTORY='tracker116-history-v1', SOUND_PREF='tracker116-sound-v1', PENDING='tracker116-pending-finish-v1';
 function mk(k){return{ex:0,set:0,edit:false,items:P[k].map(x=>({rir:'',tech:'',note:'',sets:Array.from({length:x.sets},(_,i)=>({weight:(x.w||''),reps:String(x.t[i]??''),done:false}))}))}}
 function fresh(){return{S:{A:mk('A'),B:mk('B'),C:mk('C')},R:(PROGRAM.nextRoutine||'A'),started:null,finished:null,restEnd:null,programVersion:PROGRAM.version}}
-function load(){try{const x=JSON.parse(localStorage.getItem(STORAGE));if(!x||x.programVersion!==PROGRAM.version)return fresh();return x}catch(e){return fresh()}}
+function load(){try{const x=JSON.parse(localStorage.getItem(STORAGE));if(!x)return fresh();if(x.programVersion!==PROGRAM.version){if(x.started&&!x.finished){try{localStorage.setItem('tracker116-session-backup-'+String(x.programVersion||'unknown'),JSON.stringify(x))}catch(e){}}return fresh()}return x}catch(e){return fresh()}}
 // Load local exercise targets before building a fresh session; completed sets are never rewritten.
-const PLAN_OVERRIDES='tracker116-plan-overrides-v1';
+// Local plans are scoped to a central program version. The previous version's overrides remain untouched and exportable.
+const LEGACY_PLAN_OVERRIDES='tracker116-plan-overrides-v1';
+const PLAN_OVERRIDES=LEGACY_PLAN_OVERRIDES+'-'+PROGRAM.version;
 applyOverrideToProgram();
 let state=load(),S=state.S,R=state.R,started=state.started,finished=state.finished,restEnd=state.restEnd;
 // Отметки A/B/C относятся только к текущей сессии (started — её идентификатор).
@@ -161,6 +163,10 @@ document.getElementById('warmupDone').addEventListener('change',e=>{
 
 let pendingFinish=null;
 try{pendingFinish=JSON.parse(localStorage.getItem(PENDING))||null}catch(e){pendingFinish=null}
+if(pendingFinish && pendingFinish.programVersion!==PROGRAM.version){
+  try{localStorage.setItem('tracker116-prior-pending-backup-'+String(pendingFinish.programVersion||'unknown'),JSON.stringify(pendingFinish))}catch(e){}
+  pendingFinish=null; // The earlier pending workout must not be relabelled with the new program.
+}
 let timer=null,restSec=120,restRun=!!(restEnd&&restEnd>Date.now()),signaled=false;
 let soundEnabled=localStorage.getItem(SOUND_PREF)!=='off';
 let soundUnlocked=false;
@@ -168,6 +174,7 @@ const $=s=>root.querySelector(s),soundBtn=$('#soundBtn'),startWorkoutBtn=$('#sta
 $('#version').textContent='Программа '+PROGRAM.version;
 
 function openSettings(){
+  syncCycleStatus();
   if(settingsModal) settingsModal.classList.remove('hidden');
 }
 function closeSettings(){
@@ -270,7 +277,7 @@ function startRest(){restSec=120;restEnd=Date.now()+120000;
 function adjust(d){if(!restRun||!restEnd)return;restEnd=Math.max(Date.now(),restEnd+d*1000);tick();persist()}
 function skip(){if(!restRun)return;restRun=false;restEnd=null;restSec=0;rclock.textContent='00:00';rlabel.textContent='Отдых закончен';if(restControls)restControls.style.display='none';persist()}
 function render(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex],s=item.sets[r.set];root.querySelectorAll('[data-routine]').forEach(b=>b.classList.toggle('active',b.dataset.routine===R));meta.textContent=`${r.ex+1}/${P[R].length} · подход ${r.set+1}/${p.sets}`;name.textContent=p.name;plan.textContent=p.plan;warm.textContent=p.warm||'';warm.style.display=p.warm?'block':'none';const tipDetails=$('#tipDetails');if(tipDetails)tipDetails.hidden=!p.warm;repLabel.textContent=p.label||'Повторы';weightLabel.textContent=(p.unit==='divisions')?'Деления':'Вес, кг';tabs.innerHTML='';item.sets.forEach((st,i)=>{const b=document.createElement('button');b.type='button';b.className='setbtn'+(i===r.set?' active':'');b.textContent=(st.done?'✓':'')+(i+1);b.addEventListener('click',()=>{saveFields();r.set=i;r.edit=st.done;persist();render()});tabs.appendChild(b)});weight.value=s.weight||'';reps.value=s.reps||'';rir.value=item.rir||'';tech.value=item.tech||'';note.value=item.note||'';done.textContent=r.edit?'Сохранить':'✓ Готово';$('#prev').disabled=r.ex===0;$('#next').disabled=r.ex===P[R].length-1;$('#prev').classList.toggle('disabled',r.ex===0);$('#next').classList.toggle('disabled',r.ex===P[R].length-1);tick();syncLifecycleUI();syncEditedBadge();renderWarmup();}
-$('#setForm').addEventListener('submit',e=>{e.preventDefault();unlockSound();const r=S[R],c=cur(),w=weight.value.trim().replace(',','.'),rp=reps.value.trim();if(w&&(!Number.isFinite(Number(w))||Number(w)<0)){status.textContent='Проверь вес';weight.focus();return}if(rp&&(!Number.isFinite(Number(rp))||Number(rp)<0)){status.textContent='Проверь значение';reps.focus();return}c.set.weight=w;c.set.reps=rp;c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();if(r.edit){c.set.done=true;r.edit=false;status.textContent='Подход сохранён';persist();render();return}if(!started||finished){status.textContent='Сначала нажми «Начать тренировку»';return}c.set.done=true;startRest();if(r.set+1<c.item.sets.length){const n=c.item.sets[r.set+1];if(!n.done){n.weight=w;n.reps=rp}r.set++}status.textContent='Подход выполнен';persist();render()});
+$('#setForm').addEventListener('submit',e=>{e.preventDefault();unlockSound();const r=S[R],c=cur(),w=weight.value.trim().replace(',','.'),rp=reps.value.trim();if(w&&(!Number.isFinite(Number(w))||Number(w)<0)){status.textContent='Проверь вес';weight.focus();return}if(rp&&(!Number.isFinite(Number(rp))||Number(rp)<0)){status.textContent='Проверь значение';reps.focus();return}c.set.weight=w;c.set.reps=rp;c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();if(r.edit){c.set.done=true;r.edit=false;status.textContent='Подход сохранён';persist();render();return}if(!started||finished){status.textContent='Сначала нажми «Начать тренировку»';return}c.set.done=true;startRest();if(r.set+1<c.item.sets.length){const n=c.item.sets[r.set+1];if(!n.done){n.weight=w;/* Keep the next set's independent target reps (e.g. 12/11/10). */}r.set++}status.textContent='Подход выполнен';persist();render()});
 root.querySelectorAll('[data-routine]').forEach(b=>b.addEventListener('click',()=>{
   const nextR=b.dataset.routine;
   if(nextR===R)return;
@@ -313,7 +320,7 @@ function makeSummary(){
     const item=r.items[ei],d=item.sets.map((s,i)=>({s,i})).filter(x=>x.s.done);
     if(!d.length)return;
     out.push(p.name);
-    out.push(d.map(({s,i})=>{total++;if(s.weight!==''&&s.reps!=='')return`${i+1}) ${s.weight} кг × ${s.reps}`;return`${i+1}) ${s.reps||'—'}`}).join(' · '));
+    out.push(d.map(({s,i})=>{total++;if(s.weight!==''&&s.reps!=='')return`${i+1}) ${s.weight} ${p.unit==='divisions'?'делений':'кг'} × ${s.reps}`;return`${i+1}) ${s.reps||'—'}`}).join(' · '));
     const details=[];
     if(item.rir)details.push(`RIR последнего: ${item.rir}`);
     if(item.tech)details.push(`техника: ${item.tech}`);
@@ -331,6 +338,42 @@ function makeSummary(){
   return out.join('\n');
 }
 function history(){try{return JSON.parse(localStorage.getItem(HISTORY))||[]}catch(e){return[]}}
+// Four-day cycle is a recommendation, not a new training routine or a history exercise.
+// A -> B -> C -> rest -> A. Rest acknowledgment is stored separately from workout data.
+const REST_MARKER='tracker116-rest-after-c-v1';
+function syncCycleStatus(){
+  const info=document.getElementById('cycleInfo');
+  const complete=document.getElementById('cycleRestComplete');
+  if(!info||!complete)return;
+  const latest=history()[0];
+  const next=latest?.routine==='A'?'B':latest?.routine==='B'?'C':latest?.routine==='C'?'Отдых':'A';
+  const isRest=next==='Отдых' && String(localStorage.getItem(REST_MARKER)||'')!==String(latest.id);
+  info.textContent='Цикл A → B → C → отдых · Следующий день: '+(isRest?'отдых':next==='Отдых'?'A':next);
+  complete.classList.toggle('hidden',!isRest);
+}
+const cycleRestCompleteBtn=document.getElementById('cycleRestComplete');
+if(cycleRestCompleteBtn)cycleRestCompleteBtn.addEventListener('click',()=>{
+  const latest=history()[0];
+  if(latest?.routine==='C'){
+    localStorage.setItem(REST_MARKER,String(latest.id));
+    syncCycleStatus();
+  }
+});
+function exportLegacyPlanData(){
+  const old=localStorage.getItem(LEGACY_PLAN_OVERRIDES);
+  const saved=localStorage.getItem('tracker116-session-backup-12-10-2026');
+  const pending=localStorage.getItem('tracker116-prior-pending-backup-12-10-2026');
+  if(!old&&!saved&&!pending)return;
+  const payload={type:'tracker116-previous-data-backup',exportedAt:new Date().toISOString(),programVersion:'12-10-2026',legacyPlanOverrides:old?JSON.parse(old):null,unfinishedSession:saved?JSON.parse(saved):null,unfinishedSummary:pending?JSON.parse(pending):null};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='SportTracker-backup-before-22-10-2026.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+const exportPriorBtn=document.getElementById('exportPriorPlan');
+if(exportPriorBtn){
+  exportPriorBtn.addEventListener('click',exportLegacyPlanData);
+  exportPriorBtn.classList.toggle('hidden',!localStorage.getItem(LEGACY_PLAN_OVERRIDES)&&!localStorage.getItem('tracker116-session-backup-12-10-2026')&&!localStorage.getItem('tracker116-prior-pending-backup-12-10-2026'));
+}
+
 function storeHistory(text){
   const h=history(),snap=pendingFinish||{S,R,started,finished:Date.now(),programVersion:PROGRAM.version};
   const raw={
@@ -352,11 +395,13 @@ function storeHistory(text){
   };
   h.unshift({id:Date.now(),routine:snap.R,date:new Date(snap.finished||Date.now()).toISOString(),programVersion:snap.programVersion||PROGRAM.version,text,data:raw});
   localStorage.setItem(HISTORY,JSON.stringify(h.slice(0,100)));
+  syncCycleStatus();
 }
 function deleteHistoryItem(id){
   const h=history().filter(x=>x.id!==id);
   localStorage.setItem(HISTORY,JSON.stringify(h));
   renderHistory();
+  syncCycleStatus();
   status.textContent='Запись удалена из истории';
 }
 function renderHistory(){
@@ -786,7 +831,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 // --- PWA update controls v1.3 ---
-const TRACKER_APP_VERSION = '2.2';
+const TRACKER_APP_VERSION = '2.2.1';
 
 async function forceTrackerUpdate() {
   const btn = document.getElementById('trackerUpdateBtn');

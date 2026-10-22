@@ -179,11 +179,14 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
       <button id="notifyBtn" type="button" aria-pressed="false">🔔 Уведомления</button>
       <button id="historyBtn" type="button">📚 История тренировок</button>
       <button id="settingsPlanBtn" type="button">✎ План и импорт / экспорт</button>
+      <button id="exportPriorPlan" class="hidden" type="button">Скачать старые локальные настройки и черновик</button>
       <button id="trackerUpdateBtn" type="button">↻ Проверить обновление</button>
     </div>
     <div class="settings-meta">
+      <div id="cycleInfo">Цикл A → B → C → отдых</div>
+      <button id="cycleRestComplete" class="hidden" type="button">Отметить день отдыха завершённым</button>
       <div id="version"></div>
-      <div id="appVersionLabel">v2.2</div>
+      <div id="appVersionLabel">v2.2.1</div>
     </div>
   </div>
 </div>
@@ -227,9 +230,9 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
     </details>
   </div>
 </main>
-<script src="program.js?v=20261012-2"></script>
+<script src="program.js?v=20261022-program"></script>
 <script src="push-config.js?v=2.0"></script>
-<script src="app.js?v=2.2-ui-refresh-20261022"></script>
+<script src="app.js?v=2.2.1-program-20261022"></script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js', {updateViaCache:'none'}).catch(()=>{}));}</script>
 
 

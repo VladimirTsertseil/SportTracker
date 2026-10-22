@@ -1,9 +1,10 @@
-const CACHE = 'tracker116-v2.2-ui-refresh';
+const CACHE = 'tracker116-v2.2.1-program-20261022';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
-  './app.js?v=2.2-ui-refresh-20261022',
+  './app.js?v=2.2.1-program-20261022',
+  './program.js?v=20261022-program',
   './program.js',
   './manifest.webmanifest',
   './icon-192.png',
