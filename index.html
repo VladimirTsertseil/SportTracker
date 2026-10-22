@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#080b10" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#080b10" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="116 дней">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon-192.png">
-<title>116 дней — тренировочный трекер</title>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SportTracker">
+<link rel="manifest" href="manifest.webmanifest?v=2.2">
+<link rel="apple-touch-icon" href="icon-192.png?v=2.2">
+<title>SportTracker</title>
 <style>
 :root{--bg:#f5f5f7;--card:#fff;--text:#111114;--muted:#6e6e73;--border:#d7d7dc;--accent:#0a84ff;--accent-bg:#eaf4ff}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif}main{width:min(100%,740px);margin:auto;padding:8px;padding-bottom:calc(12px + env(safe-area-inset-bottom));font-variant-numeric:tabular-nums}.top{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:6px}.routines{display:flex;gap:5px}button,input,select,textarea{font:inherit}button{min-height:42px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);padding:0 12px}button.active{border-color:var(--accent);background:var(--accent-bg);font-weight:700}.timer-title,.meta,.plan,.warm,.rest-label,.small{color:var(--muted)}.timer-title{font-size:12px;text-align:right}.timer{font-size:21px;font-weight:700}.card,.panel{background:var(--card);border:1px solid var(--border);border-radius:17px;padding:10px}.head{display:grid;grid-template-columns:1fr auto;gap:8px}.meta{font-size:12px}.name{font-size:21px;line-height:1.15;font-weight:700;margin:2px 0}.plan{font-size:14px}.warm{font-size:12px;line-height:1.25;margin-top:3px}.rest-wrap{text-align:right}.rest-wrap .timer{font-size:31px}.sets{display:flex;gap:5px;overflow-x:auto;margin-top:7px}.setbtn{width:40px;min-width:40px;height:40px;padding:0}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:7px}.form{margin-top:7px}label{font-size:12px}input,select,textarea{width:100%;min-height:42px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);padding:8px 10px;font-size:16px}.done{width:100%;margin-top:7px;border-color:var(--accent);background:var(--accent-bg);font-size:18px;font-weight:700}.metric{display:grid;grid-template-columns:90px 1fr;gap:7px;align-items:center;margin-top:7px}.metric span{font-size:12px;color:var(--muted)}.note-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:5px}.rest-row{display:flex;align-items:center;gap:5px;margin-top:7px;flex-wrap:wrap}.rest-label{font-size:12px;margin-right:auto}.nav{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:7px}.finish{border-color:var(--accent);font-weight:700}.panel{margin-top:8px}.hidden{display:none}.summary-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px}.disabled{opacity:.4}textarea{min-height:220px;resize:vertical}.tools{display:flex;justify-content:space-between;gap:6px;align-items:center;margin:4px 0 8px}.tools button{min-height:34px;font-size:13px;padding:0 10px}.history-item{border-top:1px solid var(--border);padding:9px 0}.history-item:first-child{border-top:0}.history-item button{min-height:34px}.history-meta{font-size:12px;color:var(--muted);margin-top:2px}.history-actions{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}.history-delete{border-color:#ff453a;color:#ff453a}.start-row{display:flex;justify-content:flex-end;margin:0 0 7px}.start-row button{min-height:36px;font-size:13px}.install-note{font-size:12px;color:var(--muted);margin-top:6px}
@@ -35,7 +35,64 @@
 .warmup-complete input:disabled{opacity:.5}
 .warmup-note{font-size:11px;color:var(--muted);margin:9px 0 0;line-height:1.35}
 
+
+/* UI refresh v2.2: cleaner top area, compact warmup, settings sheet */
+.tools{display:none}
+.topbar{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin:2px 0 8px}
+.top-right{display:flex;align-items:flex-end;gap:8px}
+.time-box{text-align:right;min-width:108px}
+.icon-btn{width:42px;min-width:42px;height:42px;padding:0;font-size:18px;display:inline-flex;align-items:center;justify-content:center}
+.start-row{display:flex;justify-content:flex-end;margin:0 0 6px}
+.start-row button{min-height:40px;font-size:15px;font-weight:600}
+.warmup-panel{margin:0 0 8px;border-radius:15px}
+.warmup-panel summary{min-height:44px;padding:8px 12px}
+.warmup-title{font-size:14px;font-weight:700}
+.warmup-state{font-size:11px;max-width:none}
+.warmup-body{padding:0 12px 12px}
+.warmup-subtitle{font-size:12px;margin:10px 0 6px}
+.warmup-list,.warmup-ramps{font-size:12px;gap:4px}
+.warmup-complete{font-size:13px;padding-top:10px;margin-top:10px}
+.warmup-note{font-size:10px;margin-top:8px}
+.settings-card{background:var(--card);border-color:var(--border);color:var(--text)}
+.settings-list{display:grid;gap:8px;margin-top:10px}
+.settings-list button{width:100%;justify-content:flex-start;text-align:left;min-height:44px}
+.settings-meta{border-top:1px solid var(--border);margin-top:14px;padding-top:12px;color:var(--muted);font-size:13px;display:grid;gap:4px}
+.settings-note{font-size:12px;color:var(--muted);line-height:1.35;margin-top:2px}
+
 @media(prefers-color-scheme:dark){:root{--bg:#000;--card:#1c1c1e;--text:#f5f5f7;--muted:#a1a1a6;--border:#3a3a3c;--accent:#0a84ff;--accent-bg:#0b3154}}
+
+/* SportTracker v2.2 visual refresh. No workout-data schema changes. */
+:root{color-scheme:dark;--bg:#070a0e;--card:#151b23;--text:#f3f6fb;--muted:#97a4b5;--border:#2e3949;--accent:#1695ff;--accent-bg:#153d64}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--text)}
+main{width:min(100%,740px);padding:12px 12px calc(22px + env(safe-area-inset-bottom));}
+button,input,select,textarea{color:var(--text)}
+button{border-radius:13px;border:1px solid var(--border);background:#1c242f}
+button.active{background:linear-gradient(140deg,#298cf3,#0376ea);color:white;border-color:#459bff;box-shadow:0 3px 12px #0066c84d}
+.routines{gap:7px}.routines button{min-width:44px;min-height:44px;font-weight:700}
+.topbar{align-items:center;margin:0 0 10px}.time-box .timer{font-size:20px;font-weight:700;letter-spacing:.25px}.time-box .timer-title{font-size:11px}
+.icon-btn{border-radius:50%;font-size:20px;background:#18212c}
+.start-row{margin:0 0 10px;justify-content:stretch}
+.start-row button{width:100%;font-size:15px;min-height:44px;background:#123d66;border:1px solid #158ffb;color:#f9fcff;font-weight:700}
+.card,.panel{background:linear-gradient(150deg,#17202b 0%,#121922 100%);border-color:#344052;border-radius:19px;padding:12px}
+.head{grid-template-columns:minmax(0,1fr) auto;gap:10px}.head>div:first-child{min-width:0}
+.name{font-size:21px;line-height:1.16;margin:5px 0 6px;overflow-wrap:anywhere}.meta{font-size:12px}
+.plan{font-size:14px;line-height:1.3;color:#b8c7d9}
+.rest-wrap .timer{font-size:26px;letter-spacing:-.6px}.rest-wrap{background:#202b37;border:1px solid #334456;border-radius:13px;padding:7px 8px;align-self:start;min-width:89px}.rest-wrap .meta{font-size:10px}.rest-wrap .timer{font-size:23px}
+.plan-edit-btn{min-width:35px;min-height:35px;width:35px;padding:0;font-size:17px;background:#1b2835;border-color:#364453}
+.warmup-panel{background:#151c25;border-color:#2c3746;margin-bottom:9px;border-radius:16px}.warmup-panel summary{padding:8px 11px;min-height:46px}.warmup-title{font-size:14px}.warmup-chevron{font-size:18px}.warmup-state{color:#55d590}
+.sets{margin-top:10px;gap:6px}.setbtn{width:43px;min-width:43px;height:42px;border-radius:11px;font-weight:600}
+.grid2{gap:10px}.form{margin-top:9px}label{font-size:12px}input,select,textarea{background:#1c2531;border:1px solid #354559;border-radius:12px}
+input,select{min-height:44px}.done{background:linear-gradient(90deg,#177fe6,#249afc);color:#fff;border:1px solid #47a8ff;min-height:46px;font-size:17px;margin-top:8px}
+.metric{grid-template-columns:80px 1fr;gap:8px;margin-top:10px}.metric span{font-size:12px}.note-row{gap:8px;margin-top:8px}.note-row select,.note-row input{font-size:14px}
+.rest-row{margin-top:7px}.rest-label{font-size:11px}.nav{gap:8px;margin-top:10px}.nav button{min-height:46px;font-size:13px;padding:0 8px}.nav .finish{color:#d7e8fb;border-color:#476584}
+.edited-badge{font-size:11px;color:#c5cbd1}
+.tip-details{margin-top:5px;margin-bottom:5px}.tip-details summary{font-size:12px;color:#b8c7d9;cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:5px;min-height:25px}.tip-details summary::-webkit-details-marker{display:none}.tip-details summary:before{content:'▸';color:#5ab1ff}.tip-details[open] summary:before{content:'▾'}.tip-details .warm{font-size:12px;line-height:1.35;margin:4px 0 6px;color:#aab9c9}.tip-details[hidden]{display:none}
+.settings-card{background:#151b23;border-color:#344052;color:#f3f6fb}.settings-list button{background:#1b2530;text-align:left}
+.modal-card input,.modal-card textarea{background:#202a36;color:#fff}.modal-card{border-radius:22px 22px 15px 15px}
+.install-note{color:#8999ab}
+@media(max-width:400px){.name{font-size:19px}.card{padding:11px}.rest-wrap{min-width:82px;padding:6px}.rest-wrap .timer{font-size:21px}.topbar{gap:4px}.time-box{min-width:105px}.routines button{min-width:42px}.grid2{gap:8px}.note-row{gap:6px}}
+
 </style>
 
 <style>
@@ -52,20 +109,12 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
 </head>
 <body>
 <main id="app">
-<div class="tools">
-  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-    <div class="small" id="version"></div>
-    <span id="appVersionLabel" class="small">v2.1</span>
-    <button id="trackerUpdateBtn" type="button">↻ Обновить</button>
-  </div>
-  <div style="display:flex;gap:6px">
-    <button id="soundBtn" type="button" aria-pressed="true">🔊 Звук</button><button id="notifyBtn" type="button" aria-pressed="false">🔔 Уведомления</button>
-    <button id="historyBtn" type="button">История</button>
-  </div>
-</div>
-<div class="top">
+<div class="topbar">
   <div class="routines"><button data-routine="A" type="button">A</button><button data-routine="B" type="button">B</button><button data-routine="C" type="button">C</button></div>
-  <div><div class="timer-title">Время</div><div id="clock" class="timer">00:00:00</div></div>
+  <div class="top-right">
+    <div class="time-box"><div class="timer-title">Время</div><div id="clock" class="timer">00:00:00</div></div>
+    <button id="settingsBtn" class="icon-btn" type="button" aria-label="Настройки">⚙️</button>
+  </div>
 </div>
 <div class="start-row"><button id="startWorkout" type="button">▶ Начать тренировку</button></div>
 <details id="warmupDetails" class="warmup-panel">
@@ -96,7 +145,7 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
   </div>
   <div id="editedBadge" class="edited-badge hidden">изменено локально</div>
   <div id="plan" class="plan"></div>
-  <div id="warm" class="warm"></div>
+  <details id="tipDetails" class="tip-details"><summary>Техника и рекомендации</summary><div id="warm" class="warm"></div></details>
 </div>
   <div class="rest-wrap"><div class="meta">Отдых</div><div id="restClock" class="timer">02:00</div></div>
 </div>
@@ -118,6 +167,26 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
 <section id="historyPanel" class="panel hidden"><div class="summary-head"><div style="font-weight:700">История тренировок</div><div style="display:flex;gap:6px"><button id="exportHistoryBtn" type="button">Экспорт</button><button id="closeHistory" type="button">Закрыть</button></div></div><div id="historyList"></div></section>
 <div id="status" style="font-size:13px;color:var(--muted);margin-top:6px" aria-live="polite"></div>
 <div class="install-note">Данные сохраняются только на этом устройстве. Для резервной копии сохраняй итоговые сводки.</div>
+<div id="settingsModal" class="modal hidden">
+  <div class="modal-card settings-card">
+    <div class="summary-head">
+      <div style="font-weight:700">Настройки и сервис</div>
+      <button id="closeSettings" type="button">Закрыть</button>
+    </div>
+    <div class="settings-note">Здесь спрятаны второстепенные функции, чтобы главный экран оставался чистым и тренировочным.</div>
+    <div class="settings-list">
+      <button id="soundBtn" type="button" aria-pressed="true">🔊 Звук</button>
+      <button id="notifyBtn" type="button" aria-pressed="false">🔔 Уведомления</button>
+      <button id="historyBtn" type="button">📚 История тренировок</button>
+      <button id="settingsPlanBtn" type="button">✎ План и импорт / экспорт</button>
+      <button id="trackerUpdateBtn" type="button">↻ Проверить обновление</button>
+    </div>
+    <div class="settings-meta">
+      <div id="version"></div>
+      <div id="appVersionLabel">v2.2</div>
+    </div>
+  </div>
+</div>
 <div id="planEditorModal" class="modal hidden">
   <div class="modal-card">
     <div class="summary-head">
@@ -160,7 +229,7 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
 </main>
 <script src="program.js?v=20261012-2"></script>
 <script src="push-config.js?v=2.0"></script>
-<script src="app.js?v=2.1-warmup"></script>
+<script src="app.js?v=2.2-ui-refresh-20261022"></script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js', {updateViaCache:'none'}).catch(()=>{}));}</script>
 
 

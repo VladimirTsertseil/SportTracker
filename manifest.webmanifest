@@ -1,14 +1,22 @@
 {
-  "name": "116 дней — тренировочный трекер",
-  "short_name": "116 дней",
+  "name": "SportTracker — тренировки",
+  "short_name": "SportTracker",
   "description": "Персональный трекер тренировок A/B/C",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f5f5f7",
-  "theme_color": "#f5f5f7",
+  "background_color": "#070a0e",
+  "theme_color": "#070a0e",
   "icons": [
-    {"src":"icon-192.png","sizes":"192x192","type":"image/png"},
-    {"src":"icon-512.png","sizes":"512x512","type":"image/png"}
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }

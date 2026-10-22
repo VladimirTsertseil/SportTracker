@@ -98,6 +98,9 @@ const STORAGE='tracker116-state-v1', HISTORY='tracker116-history-v1', SOUND_PREF
 function mk(k){return{ex:0,set:0,edit:false,items:P[k].map(x=>({rir:'',tech:'',note:'',sets:Array.from({length:x.sets},(_,i)=>({weight:(x.w||''),reps:String(x.t[i]??''),done:false}))}))}}
 function fresh(){return{S:{A:mk('A'),B:mk('B'),C:mk('C')},R:(PROGRAM.nextRoutine||'A'),started:null,finished:null,restEnd:null,programVersion:PROGRAM.version}}
 function load(){try{const x=JSON.parse(localStorage.getItem(STORAGE));if(!x||x.programVersion!==PROGRAM.version)return fresh();return x}catch(e){return fresh()}}
+// Load local exercise targets before building a fresh session; completed sets are never rewritten.
+const PLAN_OVERRIDES='tracker116-plan-overrides-v1';
+applyOverrideToProgram();
 let state=load(),S=state.S,R=state.R,started=state.started,finished=state.finished,restEnd=state.restEnd;
 // Отметки A/B/C относятся только к текущей сессии (started — её идентификатор).
 function readWarmupSession(sessionStarted){
@@ -149,6 +152,10 @@ document.getElementById('warmupDone').addEventListener('change',e=>{
   if(!started||finished){e.target.checked=false;return;}
   warmupDone[R]=e.target.checked;
   saveWarmupSession();
+  if(e.target.checked){
+    const details=document.getElementById('warmupDetails');
+    if(details) details.open=false;
+  }
   renderWarmup();
 });
 
@@ -157,8 +164,15 @@ try{pendingFinish=JSON.parse(localStorage.getItem(PENDING))||null}catch(e){pendi
 let timer=null,restSec=120,restRun=!!(restEnd&&restEnd>Date.now()),signaled=false;
 let soundEnabled=localStorage.getItem(SOUND_PREF)!=='off';
 let soundUnlocked=false;
-const $=s=>root.querySelector(s),soundBtn=$('#soundBtn'),startWorkoutBtn=$('#startWorkout'),weightLabel=$('#weightLabel'),clock=$('#clock'),rclock=$('#restClock'),rlabel=$('#restLabel'),meta=$('#meta'),name=$('#name'),plan=$('#plan'),warm=$('#warm'),tabs=$('#tabs'),weight=$('#weight'),reps=$('#reps'),repLabel=$('#repLabel'),rir=$('#rir'),tech=$('#tech'),note=$('#note'),done=$('#done'),finalPanel=$('#finalPanel'),summaryPanel=$('#summaryPanel'),summary=$('#summary'),status=$('#status'),historyPanel=$('#historyPanel'),historyList=$('#historyList'),restControls=$('#restControls');
+const $=s=>root.querySelector(s),soundBtn=$('#soundBtn'),startWorkoutBtn=$('#startWorkout'),weightLabel=$('#weightLabel'),clock=$('#clock'),rclock=$('#restClock'),rlabel=$('#restLabel'),meta=$('#meta'),name=$('#name'),plan=$('#plan'),warm=$('#warm'),tabs=$('#tabs'),weight=$('#weight'),reps=$('#reps'),repLabel=$('#repLabel'),rir=$('#rir'),tech=$('#tech'),note=$('#note'),done=$('#done'),finalPanel=$('#finalPanel'),summaryPanel=$('#summaryPanel'),summary=$('#summary'),status=$('#status'),historyPanel=$('#historyPanel'),historyList=$('#historyList'),restControls=$('#restControls'),settingsModal=$('#settingsModal'),settingsBtn=$('#settingsBtn');
 $('#version').textContent='Программа '+PROGRAM.version;
+
+function openSettings(){
+  if(settingsModal) settingsModal.classList.remove('hidden');
+}
+function closeSettings(){
+  if(settingsModal) settingsModal.classList.add('hidden');
+}
 
 function updateSoundButton(){
   if(!soundBtn)return;
@@ -255,7 +269,7 @@ function startRest(){restSec=120;restEnd=Date.now()+120000;
   scheduleRestPush(Math.max(1,Math.round((restEnd-Date.now())/1000)));restRun=true;signaled=false;if(restControls)restControls.style.display='flex';if(!timer)timer=setInterval(tick,250);tick();persist()}
 function adjust(d){if(!restRun||!restEnd)return;restEnd=Math.max(Date.now(),restEnd+d*1000);tick();persist()}
 function skip(){if(!restRun)return;restRun=false;restEnd=null;restSec=0;rclock.textContent='00:00';rlabel.textContent='Отдых закончен';if(restControls)restControls.style.display='none';persist()}
-function render(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex],s=item.sets[r.set];root.querySelectorAll('[data-routine]').forEach(b=>b.classList.toggle('active',b.dataset.routine===R));meta.textContent=`${r.ex+1}/${P[R].length} · подход ${r.set+1}/${p.sets}`;name.textContent=p.name;plan.textContent=p.plan;warm.textContent=p.warm||'';warm.style.display=p.warm?'block':'none';repLabel.textContent=p.label||'Повторы';weightLabel.textContent=(p.unit==='divisions')?'Деления':'Вес, кг';tabs.innerHTML='';item.sets.forEach((st,i)=>{const b=document.createElement('button');b.type='button';b.className='setbtn'+(i===r.set?' active':'');b.textContent=(st.done?'✓':'')+(i+1);b.addEventListener('click',()=>{saveFields();r.set=i;r.edit=st.done;persist();render()});tabs.appendChild(b)});weight.value=s.weight||'';reps.value=s.reps||'';rir.value=item.rir||'';tech.value=item.tech||'';note.value=item.note||'';done.textContent=r.edit?'Сохранить':'✓ Готово';$('#prev').disabled=r.ex===0;$('#next').disabled=r.ex===P[R].length-1;$('#prev').classList.toggle('disabled',r.ex===0);$('#next').classList.toggle('disabled',r.ex===P[R].length-1);tick();syncLifecycleUI();syncEditedBadge();renderWarmup();}
+function render(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex],s=item.sets[r.set];root.querySelectorAll('[data-routine]').forEach(b=>b.classList.toggle('active',b.dataset.routine===R));meta.textContent=`${r.ex+1}/${P[R].length} · подход ${r.set+1}/${p.sets}`;name.textContent=p.name;plan.textContent=p.plan;warm.textContent=p.warm||'';warm.style.display=p.warm?'block':'none';const tipDetails=$('#tipDetails');if(tipDetails)tipDetails.hidden=!p.warm;repLabel.textContent=p.label||'Повторы';weightLabel.textContent=(p.unit==='divisions')?'Деления':'Вес, кг';tabs.innerHTML='';item.sets.forEach((st,i)=>{const b=document.createElement('button');b.type='button';b.className='setbtn'+(i===r.set?' active':'');b.textContent=(st.done?'✓':'')+(i+1);b.addEventListener('click',()=>{saveFields();r.set=i;r.edit=st.done;persist();render()});tabs.appendChild(b)});weight.value=s.weight||'';reps.value=s.reps||'';rir.value=item.rir||'';tech.value=item.tech||'';note.value=item.note||'';done.textContent=r.edit?'Сохранить':'✓ Готово';$('#prev').disabled=r.ex===0;$('#next').disabled=r.ex===P[R].length-1;$('#prev').classList.toggle('disabled',r.ex===0);$('#next').classList.toggle('disabled',r.ex===P[R].length-1);tick();syncLifecycleUI();syncEditedBadge();renderWarmup();}
 $('#setForm').addEventListener('submit',e=>{e.preventDefault();unlockSound();const r=S[R],c=cur(),w=weight.value.trim().replace(',','.'),rp=reps.value.trim();if(w&&(!Number.isFinite(Number(w))||Number(w)<0)){status.textContent='Проверь вес';weight.focus();return}if(rp&&(!Number.isFinite(Number(rp))||Number(rp)<0)){status.textContent='Проверь значение';reps.focus();return}c.set.weight=w;c.set.reps=rp;c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();if(r.edit){c.set.done=true;r.edit=false;status.textContent='Подход сохранён';persist();render();return}if(!started||finished){status.textContent='Сначала нажми «Начать тренировку»';return}c.set.done=true;startRest();if(r.set+1<c.item.sets.length){const n=c.item.sets[r.set+1];if(!n.done){n.weight=w;n.reps=rp}r.set++}status.textContent='Подход выполнен';persist();render()});
 root.querySelectorAll('[data-routine]').forEach(b=>b.addEventListener('click',()=>{
   const nextR=b.dataset.routine;
@@ -366,7 +380,7 @@ function exportHistory(){
     const payload={
       exportedAt:new Date().toISOString(),
       app:'116 дней',
-      appVersion:'1.7.1',
+      appVersion:'2.2',
       programVersion:PROGRAM.version,
       history:history()
     };
@@ -393,8 +407,13 @@ $('#makeSummary').addEventListener('click',()=>{
 });
 $('#selectText').addEventListener('click',()=>{summary.focus();summary.select();summary.setSelectionRange(0,summary.value.length)});
 soundBtn.addEventListener('click',()=>{soundEnabled=!soundEnabled;localStorage.setItem(SOUND_PREF,soundEnabled?'on':'off');updateSoundButton();if(soundEnabled){soundUnlocked=false;unlockSound();status.textContent='Звук отдыха включён'}else{restAudio.pause();restAudio.currentTime=0;leaveTransientAudioSession();status.textContent='Звук отдыха выключен'}});
-$('#historyBtn').addEventListener('click',()=>{renderHistory();historyPanel.classList.remove('hidden');summaryPanel.classList.add('hidden');finalPanel.classList.add('hidden')});
+$('#historyBtn').addEventListener('click',()=>{renderHistory();historyPanel.classList.remove('hidden');summaryPanel.classList.add('hidden');finalPanel.classList.add('hidden');closeSettings();historyPanel.scrollIntoView({behavior:'smooth',block:'start'})});
 $('#closeHistory').addEventListener('click',()=>historyPanel.classList.add('hidden'));
+if(settingsBtn) settingsBtn.addEventListener('click',openSettings);
+$('#closeSettings')?.addEventListener('click',closeSettings);
+document.addEventListener('click',e=>{
+  if(e.target===settingsModal) closeSettings();
+});
 $('#exportHistoryBtn').addEventListener('click',exportHistory);
 startWorkoutBtn.addEventListener('click',beginWorkout);
 window.addEventListener('pagehide',saveFields);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveFields()});
@@ -404,7 +423,6 @@ if(pendingFinish){finalPanel.classList.remove('hidden');clock.textContent='00:00
 updateSoundButton();syncLifecycleUI();render();
 
 // --- v1.8 local plan editor ---
-const PLAN_OVERRIDES='tracker116-plan-overrides-v1';
 let editorRoutine=null, editorExercise=null;
 
 function getOverrides(){
@@ -431,7 +449,6 @@ function applyOverrideToProgram(){
     });
   });
 }
-applyOverrideToProgram();
 
 function openPlanEditor(r,ei){
   editorRoutine=r; editorExercise=ei;
@@ -445,6 +462,7 @@ function openPlanEditor(r,ei){
   document.getElementById('planEditorModal').classList.remove('hidden');
 }
 function closePlanEditor(){document.getElementById('planEditorModal').classList.add('hidden')}
+$('#settingsPlanBtn').addEventListener('click',()=>{closeSettings();openPlanEditor(R,S[R].ex);$('#planDataDetails').open=true;});
 function syncEditedBadge(){
   const badge=$('#editedBadge');
   if(!badge)return;
@@ -768,7 +786,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 // --- PWA update controls v1.3 ---
-const TRACKER_APP_VERSION = '2.1';
+const TRACKER_APP_VERSION = '2.2';
 
 async function forceTrackerUpdate() {
   const btn = document.getElementById('trackerUpdateBtn');
@@ -792,8 +810,8 @@ async function forceTrackerUpdate() {
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!sessionStorage.getItem('tracker116-reloaded-v20')) {
-      sessionStorage.setItem('tracker116-reloaded-v20', '1');
+    if (!sessionStorage.getItem('tracker116-reloaded-v22')) {
+      sessionStorage.setItem('tracker116-reloaded-v22', '1');
       window.location.reload();
     }
   });

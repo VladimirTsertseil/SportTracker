@@ -1,9 +1,9 @@
-const CACHE = 'tracker116-v2.1-warmup';
+const CACHE = 'tracker116-v2.2-ui-refresh';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
-  './app.js?v=2.1-warmup',
+  './app.js?v=2.2-ui-refresh-20261022',
   './program.js',
   './manifest.webmanifest',
   './icon-192.png',
