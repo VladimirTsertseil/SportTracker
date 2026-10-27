@@ -269,7 +269,24 @@ function beginWorkout(){
 function fmt(s){s=Math.max(0,Math.floor(s||0));return[Math.floor(s/3600),Math.floor((s%3600)/60),s%60].map(v=>String(v).padStart(2,'0')).join(':')}
 function fmtR(s){s=Math.max(0,Math.ceil(s||0));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
 function cur(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex];return{r,p,item,set:item.sets[r.set]}}
-function saveFields(){const c=cur();c.set.weight=weight.value.trim().replace(',','.');c.set.reps=reps.value.trim();c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();persist()}
+// Carry the most recently entered working weight and repetitions into every
+// upcoming unfinished set of this exercise. Never alter completed results.
+function carryForwardSetValues(item, index, nextWeight, nextReps){
+  for(let i=index+1;i<item.sets.length;i++){
+    const upcoming=item.sets[i];
+    if(upcoming.done)continue;
+    upcoming.weight=nextWeight;
+    upcoming.reps=nextReps;
+  }
+}
+function saveFields(){
+  const c=cur(),newWeight=weight.value.trim().replace(',','.'),newReps=reps.value.trim();
+  const changed=c.set.weight!==newWeight||c.set.reps!==newReps;
+  c.set.weight=newWeight;c.set.reps=newReps;
+  c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();
+  if(changed)carryForwardSetValues(c.item,c.r.set,newWeight,newReps);
+  persist();
+}
 function startClock(){if(started&&!finished)return;started=Date.now();finished=null;if(!timer)timer=setInterval(tick,250);persist()}
 function tick(){if(started)clock.textContent=fmt(((finished||Date.now())-started)/1000);if(restRun&&restEnd){const left=Math.max(0,(restEnd-Date.now())/1000);restSec=Math.ceil(left);rclock.textContent=fmtR(restSec);rlabel.textContent='Отдых '+fmtR(restSec).replace(/^00:/,'');if(left<=0){restRun=false;restEnd=null;restSec=0;rclock.textContent='00:00';rlabel.textContent='Отдых закончен';if(restControls)restControls.style.display='none';if(!signaled){signaled=true;status.textContent='Отдых закончен';playRestSound()}persist()}}}
 function startRest(){restSec=120;restEnd=Date.now()+120000;
@@ -277,7 +294,7 @@ function startRest(){restSec=120;restEnd=Date.now()+120000;
 function adjust(d){if(!restRun||!restEnd)return;restEnd=Math.max(Date.now(),restEnd+d*1000);tick();persist()}
 function skip(){if(!restRun)return;restRun=false;restEnd=null;restSec=0;rclock.textContent='00:00';rlabel.textContent='Отдых закончен';if(restControls)restControls.style.display='none';persist()}
 function render(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex],s=item.sets[r.set];root.querySelectorAll('[data-routine]').forEach(b=>b.classList.toggle('active',b.dataset.routine===R));meta.textContent=`${r.ex+1}/${P[R].length} · подход ${r.set+1}/${p.sets}`;name.textContent=p.name;plan.textContent=p.plan;warm.textContent=p.warm||'';warm.style.display=p.warm?'block':'none';const tipDetails=$('#tipDetails');if(tipDetails)tipDetails.hidden=!p.warm;repLabel.textContent=p.label||'Повторы';weightLabel.textContent=(p.unit==='divisions')?'Деления':'Вес, кг';tabs.innerHTML='';item.sets.forEach((st,i)=>{const b=document.createElement('button');b.type='button';b.className='setbtn'+(i===r.set?' active':'');b.textContent=(st.done?'✓':'')+(i+1);b.addEventListener('click',()=>{saveFields();r.set=i;r.edit=st.done;persist();render()});tabs.appendChild(b)});weight.value=s.weight||'';reps.value=s.reps||'';rir.value=item.rir||'';tech.value=item.tech||'';note.value=item.note||'';done.textContent=r.edit?'Сохранить':'✓ Готово';$('#prev').disabled=r.ex===0;$('#next').disabled=r.ex===P[R].length-1;$('#prev').classList.toggle('disabled',r.ex===0);$('#next').classList.toggle('disabled',r.ex===P[R].length-1);tick();syncLifecycleUI();syncEditedBadge();renderWarmup();}
-$('#setForm').addEventListener('submit',e=>{e.preventDefault();unlockSound();const r=S[R],c=cur(),w=weight.value.trim().replace(',','.'),rp=reps.value.trim();if(w&&(!Number.isFinite(Number(w))||Number(w)<0)){status.textContent='Проверь вес';weight.focus();return}if(rp&&(!Number.isFinite(Number(rp))||Number(rp)<0)){status.textContent='Проверь значение';reps.focus();return}c.set.weight=w;c.set.reps=rp;c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();if(r.edit){c.set.done=true;r.edit=false;status.textContent='Подход сохранён';persist();render();return}if(!started||finished){status.textContent='Сначала нажми «Начать тренировку»';return}c.set.done=true;startRest();if(r.set+1<c.item.sets.length){const n=c.item.sets[r.set+1];if(!n.done){n.weight=w;/* Keep the next set's independent target reps (e.g. 12/11/10). */}r.set++}status.textContent='Подход выполнен';persist();render()});
+$('#setForm').addEventListener('submit',e=>{e.preventDefault();unlockSound();const r=S[R],c=cur(),w=weight.value.trim().replace(',','.'),rp=reps.value.trim();if(w&&(!Number.isFinite(Number(w))||Number(w)<0)){status.textContent='Проверь вес';weight.focus();return}if(rp&&(!Number.isFinite(Number(rp))||Number(rp)<0)){status.textContent='Проверь значение';reps.focus();return}c.set.weight=w;c.set.reps=rp;c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();if(r.edit){c.set.done=true;r.edit=false;status.textContent='Подход сохранён';persist();render();return}if(!started||finished){status.textContent='Сначала нажми «Начать тренировку»';return}c.set.done=true;carryForwardSetValues(c.item,r.set,w,rp);startRest();if(r.set+1<c.item.sets.length){r.set++}status.textContent='Подход выполнен';persist();render()});
 root.querySelectorAll('[data-routine]').forEach(b=>b.addEventListener('click',()=>{
   const nextR=b.dataset.routine;
   if(nextR===R)return;
