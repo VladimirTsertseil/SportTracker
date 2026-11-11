@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>if(navigator.standalone===true)document.documentElement.classList.add('ios-standalone');</script>
 <meta name="theme-color" content="#080b10" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#080b10" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -65,7 +66,14 @@
 :root{color-scheme:dark;--bg:#070a0e;--card:#151b23;--text:#f3f6fb;--muted:#97a4b5;--border:#2e3949;--accent:#1695ff;--accent-bg:#153d64}
 html{background:var(--bg)}
 body{background:var(--bg);color:var(--text)}
-main{width:min(100%,740px);padding:12px 12px calc(22px + env(safe-area-inset-bottom));}
+/* Respect the iPhone Dynamic Island / status bar in installed PWA mode. */
+main{width:min(100%,740px);padding:calc(12px + env(safe-area-inset-top, 0px)) 12px calc(22px + env(safe-area-inset-bottom, 0px));}
+@media (display-mode: standalone) and (max-width: 500px){
+  main{padding-top:max(70px, calc(12px + env(safe-area-inset-top, 0px)));}
+}
+@media (max-width: 500px){
+  html.ios-standalone main{padding-top:max(70px, calc(12px + env(safe-area-inset-top, 0px)));}
+}
 button,input,select,textarea{color:var(--text)}
 button{border-radius:13px;border:1px solid var(--border);background:#1c242f}
 button.active{background:linear-gradient(140deg,#298cf3,#0376ea);color:white;border-color:#459bff;box-shadow:0 3px 12px #0066c84d}
@@ -187,7 +195,7 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
       <div id="cycleInfo">Цикл A → B → C → отдых</div>
       <button id="cycleRestComplete" class="hidden" type="button">Отметить день отдыха завершённым</button>
       <div id="version"></div>
-      <div id="appVersionLabel">v2.3.1</div>
+      <div id="appVersionLabel">v2.3.2</div>
     </div>
   </div>
 </div>
@@ -234,7 +242,7 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
 <script src="program.js?v=20261022-program"></script>
 <script src="gym-program.js?v=20261111-gym-v1"></script>
 <script src="push-config.js?v=2.0"></script>
-<script src="app.js?v=2.3.1-push-resubscribe-20261111"></script>
+<script src="app.js?v=2.3.2-safearea-shortwhistle-20261111"></script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js', {updateViaCache:'none'}).catch(()=>{}));}</script>
 
 

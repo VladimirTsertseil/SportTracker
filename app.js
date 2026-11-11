@@ -11,7 +11,7 @@ const P=PROGRAM.routines;
 // --- Audio overlay mode v1.6 ---
 // On supporting iOS/WebKit builds, "transient" lets a short app sound mix with
 // music from another app instead of taking over the phone's playback session.
-const restAudio = new Audio('rest-whistle-v13.wav');
+const restAudio = new Audio('rest-whistle-short-20261111.wav');
 restAudio.preload = 'auto';
 
 let previousAudioSessionType = null;
@@ -1060,7 +1060,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 // --- PWA update controls v1.3 ---
-const TRACKER_APP_VERSION = '2.3.1';
+const TRACKER_APP_VERSION = '2.3.2';
 
 async function forceTrackerUpdate() {
   const btn = document.getElementById('trackerUpdateBtn');
