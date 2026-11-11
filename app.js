@@ -897,9 +897,12 @@ document.addEventListener('click',function(e){
 
 
 
-// --- Web Push v2.0 ---
+// --- Web Push v2.1: safe on/off and iOS re-subscription ---
 const PUSH_PREF='tracker116-push-enabled-v1';
 let currentRestPushJobId=null;
+let pushRegistration=null;
+let pushSubscription=null;
+let pushToggleInFlight=false;
 
 function pushConfig(){
   return window.TRACKER_PUSH_CONFIG || {BACKEND_URL:'',VAPID_PUBLIC_KEY:''};
@@ -910,57 +913,91 @@ function base64UrlToUint8Array(base64String){
   const rawData=atob(base64);
   return Uint8Array.from([...rawData].map(c=>c.charCodeAt(0)));
 }
+// Cache the existing SW registration before the user taps the push button.
+// On iOS, the call to pushManager.subscribe() should start during a user gesture.
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.ready.then(async reg=>{
+    pushRegistration=reg;
+    try{pushSubscription=await reg.pushManager.getSubscription();}catch(e){console.warn('push preflight',e);}
+  }).catch(e=>console.warn('push registration unavailable',e));
+}
 async function getPushSubscription(){
   if(!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('Web Push не поддерживается этим браузером.');
-  const reg=await navigator.serviceWorker.ready;
-  return await reg.pushManager.getSubscription();
+  const reg=pushRegistration||await navigator.serviceWorker.ready;
+  pushRegistration=reg;
+  pushSubscription=await reg.pushManager.getSubscription();
+  return pushSubscription;
 }
-async function ensurePushSubscription(){
+async function registerPushOnServer(sub){
   const cfg=pushConfig();
-  if(!cfg.BACKEND_URL || !cfg.VAPID_PUBLIC_KEY) throw new Error('Push ещё не настроен: укажи BACKEND_URL и VAPID_PUBLIC_KEY в push-config.js.');
-  let sub=await getPushSubscription();
+  let r;
+  try{
+    r=await fetch(cfg.BACKEND_URL.replace(/\/$/,'')+'/api/subscribe',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subscription:sub})
+    });
+  }catch(e){
+    throw new Error('Не удалось связаться с сервером уведомлений. Проверь подключение к интернету и попробуй ещё раз.');
+  }
+  if(!r.ok) throw new Error('Сервер уведомлений отклонил подписку (HTTP '+r.status+').');
+  localStorage.setItem(PUSH_PREF,'1');
+  return sub;
+}
+async function ensurePushSubscription(prestartedSubscription){
+  const cfg=pushConfig();
+  if(!cfg.BACKEND_URL || !cfg.VAPID_PUBLIC_KEY) throw new Error('Не задан сервер уведомлений или ключ VAPID.');
+  let sub=prestartedSubscription?await prestartedSubscription:await getPushSubscription();
   if(!sub){
-    const reg=await navigator.serviceWorker.ready;
+    const reg=pushRegistration||await navigator.serviceWorker.ready;
+    pushRegistration=reg;
     sub=await reg.pushManager.subscribe({
       userVisibleOnly:true,
       applicationServerKey:base64UrlToUint8Array(cfg.VAPID_PUBLIC_KEY)
     });
   }
-  const r=await fetch(cfg.BACKEND_URL.replace(/\/$/,'')+'/api/subscribe',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({subscription:sub})
-  });
-  if(!r.ok) throw new Error('Backend не принял push-подписку.');
-  localStorage.setItem(PUSH_PREF,'1');
-  return sub;
+  pushSubscription=sub;
+  return registerPushOnServer(sub);
 }
 async function disablePush(){
-  try{
-    const sub=await getPushSubscription();
-    if(sub) await sub.unsubscribe();
-  }catch(e){}
+  // Pausing notifications must NOT destroy the browser's push subscription.
+  // Otherwise, re-enabling on iOS requires a new permission-sensitive subscribe().
   localStorage.removeItem(PUSH_PREF);
   await cancelRestPush();
   syncNotifyButton();
 }
 async function enablePushFromClick(){
-  if(!('Notification' in window)) throw new Error('Уведомления не поддерживаются.');
-  const perm=await Notification.requestPermission();
-  if(perm!=='granted') throw new Error('Разрешение на уведомления не выдано.');
-  await ensurePushSubscription();
+  if(!('Notification' in window)) throw new Error('Уведомления не поддерживаются. Открой установленный SportTracker с экрана «Домой».');
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('Web Push недоступен. Открой приложение с домашнего экрана iPhone.');
+  const cfg=pushConfig();
+  if(!cfg.BACKEND_URL || !cfg.VAPID_PUBLIC_KEY) throw new Error('Не задан сервер уведомлений или ключ VAPID.');
+  if(Notification.permission==='denied') throw new Error('Уведомления заблокированы в iOS. Разреши их в Настройки → Уведомления → SportTracker.');
+
+  // Start a needed new subscription synchronously from the tap, before any await.
+  // This repairs subscriptions that the previous version removed with unsubscribe().
+  let startedSub=null;
+  if(Notification.permission==='granted' && pushRegistration && !pushSubscription){
+    startedSub=pushRegistration.pushManager.subscribe({
+      userVisibleOnly:true,
+      applicationServerKey:base64UrlToUint8Array(cfg.VAPID_PUBLIC_KEY)
+    });
+  }
+  const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
+  if(permission!=='granted') throw new Error('Разрешение на уведомления не получено. Проверь настройки уведомлений iOS.');
+  // If the permission prompt was needed, normal registration can continue now.
+  await ensurePushSubscription(startedSub);
   syncNotifyButton();
 }
 function syncNotifyButton(){
   const b=document.getElementById('notifyBtn');
   if(!b)return;
-  const enabled=localStorage.getItem(PUSH_PREF)==='1' && Notification.permission==='granted';
+  const enabled=localStorage.getItem(PUSH_PREF)==='1' && ('Notification' in window) && Notification.permission==='granted';
   b.setAttribute('aria-pressed',enabled?'true':'false');
   b.textContent=enabled?'🔔 Уведомления ✓':'🔔 Уведомления';
 }
 async function scheduleRestPush(seconds){
   if(localStorage.getItem(PUSH_PREF)!=='1') return;
-  if(Notification.permission!=='granted') return;
+  if(!('Notification' in window)||Notification.permission!=='granted') return;
   const cfg=pushConfig();
   if(!cfg.BACKEND_URL || !cfg.VAPID_PUBLIC_KEY) return;
   try{
@@ -999,8 +1036,11 @@ window.addEventListener('DOMContentLoaded',()=>{
   const b=document.getElementById('notifyBtn');
   if(b){
     b.addEventListener('click',async()=>{
+      if(pushToggleInFlight)return;
+      pushToggleInFlight=true;
+      b.disabled=true;
       try{
-        const enabled=localStorage.getItem(PUSH_PREF)==='1' && Notification.permission==='granted';
+        const enabled=localStorage.getItem(PUSH_PREF)==='1' && ('Notification' in window) && Notification.permission==='granted';
         if(enabled){
           if(confirm('Отключить уведомления об окончании отдыха?')) await disablePush();
         }else{
@@ -1009,6 +1049,10 @@ window.addEventListener('DOMContentLoaded',()=>{
         }
       }catch(e){
         alert(e?.message||String(e));
+      }finally{
+        pushToggleInFlight=false;
+        b.disabled=false;
+        syncNotifyButton();
       }
     });
   }
@@ -1016,7 +1060,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 // --- PWA update controls v1.3 ---
-const TRACKER_APP_VERSION = '2.3.0';
+const TRACKER_APP_VERSION = '2.3.1';
 
 async function forceTrackerUpdate() {
   const btn = document.getElementById('trackerUpdateBtn');
