@@ -1,7 +1,10 @@
 (()=>{
 const root=document.getElementById('app');
-const PROGRAM=window.PROGRAM_116;
-if(!PROGRAM) throw new Error('PROGRAM_116 is missing');
+const PROGRAM_CHOICE='sporttracker-active-program-v1';
+const PROGRAM_ID=localStorage.getItem(PROGRAM_CHOICE)==='gym'?'gym':'116';
+const IS_GYM=PROGRAM_ID==='gym';
+const PROGRAM=IS_GYM?window.PROGRAM_GYM:window.PROGRAM_116;
+if(!PROGRAM) throw new Error('Workout program is missing: '+PROGRAM_ID);
 const P=PROGRAM.routines;
 
 
@@ -48,7 +51,7 @@ restAudio.addEventListener('pause', () => {
 });
 
 // Разминка не является упражнением и не участвует в статистике.
-const WARMUP_PLANS = {
+const ORIGINAL_WARMUP_PLANS = {
   A: {
     duration:'10–12 мин',dynamicTime:'4 мин',
     dynamic:[
@@ -91,17 +94,55 @@ const WARMUP_PLANS = {
     ]
   }
 };
-// Отдельный ключ сохраняет совместимость с форматом существующих тренировок.
-const WARMUP_STORAGE='tracker116-warmup-session-v1';
+// The original warmups and their exercise ramp weights remain unchanged.
+const GYM_WARMUP_PLANS = {
+  A: {duration:'10–12 мин',dynamicTime:'4 мин',dynamic:[
+    'Круги плечами — 12 в обе стороны',
+    'Повороты грудного отдела — 8 на сторону',
+    'Лопаточные отжимания — 10',
+    'Лёгкая активация лопаток — 8'
+  ],ramps:[
+    ['Жим штанги лёжа','20 кг × 10 → 40 кг × 6 → 60 кг × 3 → 70 кг × 1–2 (без отказа)'],
+    ['Рычажная тяга и тренажёры','1–2 лёгких подводящих подхода; подобрать кг по маркировке конкретного тренажёра']
+  ]},
+  B: {duration:'10–12 мин',dynamicTime:'4–5 мин',dynamic:[
+    'Приседания без веса — 10',
+    'Тазобедренный шарнир без веса — 10',
+    'Динамическая мобилизация голеностопа — 8 на ногу',
+    'Подъёмы на носки без веса — 10'
+  ],ramps:[
+    ['Жим ногами 45°','2–3 подводящих подхода с постепенным увеличением веса в кг, без отказа'],
+    ['Румынская тяга','20 кг × 8 → 40 кг × 5 → 50 кг × 2']
+  ]},
+  C: {duration:'9–11 мин',dynamicTime:'4 мин',dynamic:[
+    'Круги руками — 15',
+    'Скольжения руками по стене — 10',
+    'Лопаточные отжимания — 10',
+    'Контроль подвижности плеч — 8'
+  ],ramps:[
+    ['Брусья','1 лёгкий подводящий подход в комфортной амплитуде'],
+    ['Тренажёры для спины и груди','1–2 лёгких подхода без отказа, массу подобрать в кг']
+  ]}
+};
+const WARMUP_PLANS=IS_GYM?GYM_WARMUP_PLANS:ORIGINAL_WARMUP_PLANS;
+// Separate storage namespaces. The legacy 116-day keys are exactly unchanged.
+const WARMUP_STORAGE=IS_GYM?'tracker-gym-warmup-session-v1':'tracker116-warmup-session-v1';
 
-const STORAGE='tracker116-state-v1', HISTORY='tracker116-history-v1', SOUND_PREF='tracker116-sound-v1', PENDING='tracker116-pending-finish-v1';
+const STORAGE=IS_GYM?'tracker-gym-state-v1':'tracker116-state-v1';
+const HISTORY=IS_GYM?'tracker-gym-history-v1':'tracker116-history-v1';
+const PENDING=IS_GYM?'tracker-gym-pending-finish-v1':'tracker116-pending-finish-v1';
+const SOUND_PREF='tracker116-sound-v1'; // Shared device preference; unchanged.
+const STORE_NAMES={
+  '116':{state:'tracker116-state-v1',history:'tracker116-history-v1',pending:'tracker116-pending-finish-v1',warmup:'tracker116-warmup-session-v1',rest:'tracker116-rest-after-c-v1',overrides:'tracker116-plan-overrides-v1-'+window.PROGRAM_116.version},
+  gym:{state:'tracker-gym-state-v1',history:'tracker-gym-history-v1',pending:'tracker-gym-pending-finish-v1',warmup:'tracker-gym-warmup-session-v1',rest:'tracker-gym-rest-after-c-v1',overrides:'tracker-gym-plan-overrides-v1-'+window.PROGRAM_GYM.version}
+};
 function mk(k){return{ex:0,set:0,edit:false,items:P[k].map(x=>({rir:'',tech:'',note:'',sets:Array.from({length:x.sets},(_,i)=>({weight:(x.w||''),reps:String(x.t[i]??''),done:false}))}))}}
 function fresh(){return{S:{A:mk('A'),B:mk('B'),C:mk('C')},R:(PROGRAM.nextRoutine||'A'),started:null,finished:null,restEnd:null,programVersion:PROGRAM.version}}
-function load(){try{const x=JSON.parse(localStorage.getItem(STORAGE));if(!x)return fresh();if(x.programVersion!==PROGRAM.version){if(x.started&&!x.finished){try{localStorage.setItem('tracker116-session-backup-'+String(x.programVersion||'unknown'),JSON.stringify(x))}catch(e){}}return fresh()}return x}catch(e){return fresh()}}
+function load(){try{const x=JSON.parse(localStorage.getItem(STORAGE));if(!x)return fresh();if(x.programVersion!==PROGRAM.version){if(x.started&&!x.finished){try{localStorage.setItem((IS_GYM?'tracker-gym-session-backup-':'tracker116-session-backup-')+String(x.programVersion||'unknown'),JSON.stringify(x))}catch(e){}}return fresh()}return x}catch(e){return fresh()}}
 // Load local exercise targets before building a fresh session; completed sets are never rewritten.
 // Local plans are scoped to a central program version. The previous version's overrides remain untouched and exportable.
 const LEGACY_PLAN_OVERRIDES='tracker116-plan-overrides-v1';
-const PLAN_OVERRIDES=LEGACY_PLAN_OVERRIDES+'-'+PROGRAM.version;
+const PLAN_OVERRIDES=STORE_NAMES[PROGRAM_ID].overrides;
 applyOverrideToProgram();
 let state=load(),S=state.S,R=state.R,started=state.started,finished=state.finished,restEnd=state.restEnd;
 // Отметки A/B/C относятся только к текущей сессии (started — её идентификатор).
@@ -164,7 +205,7 @@ document.getElementById('warmupDone').addEventListener('change',e=>{
 let pendingFinish=null;
 try{pendingFinish=JSON.parse(localStorage.getItem(PENDING))||null}catch(e){pendingFinish=null}
 if(pendingFinish && pendingFinish.programVersion!==PROGRAM.version){
-  try{localStorage.setItem('tracker116-prior-pending-backup-'+String(pendingFinish.programVersion||'unknown'),JSON.stringify(pendingFinish))}catch(e){}
+  try{localStorage.setItem((IS_GYM?'tracker-gym-prior-pending-backup-':'tracker116-prior-pending-backup-')+String(pendingFinish.programVersion||'unknown'),JSON.stringify(pendingFinish))}catch(e){}
   pendingFinish=null; // The earlier pending workout must not be relabelled with the new program.
 }
 let timer=null,restSec=120,restRun=!!(restEnd&&restEnd>Date.now()),signaled=false;
@@ -172,6 +213,24 @@ let soundEnabled=localStorage.getItem(SOUND_PREF)!=='off';
 let soundUnlocked=false;
 const $=s=>root.querySelector(s),soundBtn=$('#soundBtn'),startWorkoutBtn=$('#startWorkout'),weightLabel=$('#weightLabel'),clock=$('#clock'),rclock=$('#restClock'),rlabel=$('#restLabel'),meta=$('#meta'),name=$('#name'),plan=$('#plan'),warm=$('#warm'),tabs=$('#tabs'),weight=$('#weight'),reps=$('#reps'),repLabel=$('#repLabel'),rir=$('#rir'),tech=$('#tech'),note=$('#note'),done=$('#done'),finalPanel=$('#finalPanel'),summaryPanel=$('#summaryPanel'),summary=$('#summary'),status=$('#status'),historyPanel=$('#historyPanel'),historyList=$('#historyList'),restControls=$('#restControls'),settingsModal=$('#settingsModal'),settingsBtn=$('#settingsBtn');
 $('#version').textContent='Программа '+PROGRAM.version;
+const programSelector=document.getElementById('programSelector');
+if(programSelector){
+  programSelector.value=PROGRAM_ID;
+  programSelector.addEventListener('change',()=>{
+    const next=programSelector.value;
+    if(next===PROGRAM_ID)return;
+    if((started&&!finished)||pendingFinish){
+      if(!confirm('У этой программы есть незавершённая тренировка или сводка. Она сохранится отдельно. Переключить программу?')){
+        programSelector.value=PROGRAM_ID;
+        return;
+      }
+    }
+    saveFields();
+    saveWarmupSession();
+    localStorage.setItem(PROGRAM_CHOICE,next);
+    location.reload();
+  });
+}
 
 function openSettings(){
   syncCycleStatus();
@@ -271,20 +330,32 @@ function fmtR(s){s=Math.max(0,Math.ceil(s||0));return String(Math.floor(s/60)).p
 function cur(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex];return{r,p,item,set:item.sets[r.set]}}
 // Carry the most recently entered working weight and repetitions into every
 // upcoming unfinished set of this exercise. Never alter completed results.
-function carryForwardSetValues(item, index, nextWeight, nextReps){
+function carryForwardSetValues(item, index, nextWeight, nextReps, nextUnit){
   for(let i=index+1;i<item.sets.length;i++){
     const upcoming=item.sets[i];
     if(upcoming.done)continue;
+    if(nextUnit==='kg'){
+      if(upcoming.weightUnit!=='kg' && upcoming.weight!=='')upcoming.legacyWeight=upcoming.weight;
+      upcoming.weightUnit='kg';
+    }
     upcoming.weight=nextWeight;
     upcoming.reps=nextReps;
   }
 }
 function saveFields(){
-  const c=cur(),newWeight=weight.value.trim().replace(',','.'),newReps=reps.value.trim();
+  const c=cur(),enteredWeight=weight.value.trim().replace(',','.'),newReps=reps.value.trim();
+  // A legacy division value is *not* a kilogram value. Leave it untouched until
+  // the user explicitly enters kilograms or completes the new set with no mass.
+  const legacyUnconverted=!IS_GYM&&c.p.unit==='divisions'&&c.set.weightUnit!=='kg';
+  const newWeight=legacyUnconverted&&enteredWeight===''?c.set.weight:enteredWeight;
   const changed=c.set.weight!==newWeight||c.set.reps!==newReps;
+  if(legacyUnconverted&&enteredWeight!==''){
+    if(c.set.weight!=='')c.set.legacyWeight=c.set.weight;
+    c.set.weightUnit='kg';
+  }
   c.set.weight=newWeight;c.set.reps=newReps;
   c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();
-  if(changed)carryForwardSetValues(c.item,c.r.set,newWeight,newReps);
+  if(changed)carryForwardSetValues(c.item,c.r.set,newWeight,newReps,c.set.weightUnit);
   persist();
 }
 function startClock(){if(started&&!finished)return;started=Date.now();finished=null;if(!timer)timer=setInterval(tick,250);persist()}
@@ -293,8 +364,8 @@ function startRest(){restSec=120;restEnd=Date.now()+120000;
   scheduleRestPush(Math.max(1,Math.round((restEnd-Date.now())/1000)));restRun=true;signaled=false;if(restControls)restControls.style.display='flex';if(!timer)timer=setInterval(tick,250);tick();persist()}
 function adjust(d){if(!restRun||!restEnd)return;restEnd=Math.max(Date.now(),restEnd+d*1000);tick();persist()}
 function skip(){if(!restRun)return;restRun=false;restEnd=null;restSec=0;rclock.textContent='00:00';rlabel.textContent='Отдых закончен';if(restControls)restControls.style.display='none';persist()}
-function render(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex],s=item.sets[r.set];root.querySelectorAll('[data-routine]').forEach(b=>b.classList.toggle('active',b.dataset.routine===R));meta.textContent=`${r.ex+1}/${P[R].length} · подход ${r.set+1}/${p.sets}`;name.textContent=p.name;plan.textContent=p.plan;warm.textContent=p.warm||'';warm.style.display=p.warm?'block':'none';const tipDetails=$('#tipDetails');if(tipDetails)tipDetails.hidden=!p.warm;repLabel.textContent=p.label||'Повторы';weightLabel.textContent=(p.unit==='divisions')?'Деления':'Вес, кг';tabs.innerHTML='';item.sets.forEach((st,i)=>{const b=document.createElement('button');b.type='button';b.className='setbtn'+(i===r.set?' active':'');b.textContent=(st.done?'✓':'')+(i+1);b.addEventListener('click',()=>{saveFields();r.set=i;r.edit=st.done;persist();render()});tabs.appendChild(b)});weight.value=s.weight||'';reps.value=s.reps||'';rir.value=item.rir||'';tech.value=item.tech||'';note.value=item.note||'';done.textContent=r.edit?'Сохранить':'✓ Готово';$('#prev').disabled=r.ex===0;$('#next').disabled=r.ex===P[R].length-1;$('#prev').classList.toggle('disabled',r.ex===0);$('#next').classList.toggle('disabled',r.ex===P[R].length-1);tick();syncLifecycleUI();syncEditedBadge();renderWarmup();}
-$('#setForm').addEventListener('submit',e=>{e.preventDefault();unlockSound();const r=S[R],c=cur(),w=weight.value.trim().replace(',','.'),rp=reps.value.trim();if(w&&(!Number.isFinite(Number(w))||Number(w)<0)){status.textContent='Проверь вес';weight.focus();return}if(rp&&(!Number.isFinite(Number(rp))||Number(rp)<0)){status.textContent='Проверь значение';reps.focus();return}c.set.weight=w;c.set.reps=rp;c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();if(r.edit){c.set.done=true;r.edit=false;status.textContent='Подход сохранён';persist();render();return}if(!started||finished){status.textContent='Сначала нажми «Начать тренировку»';return}c.set.done=true;carryForwardSetValues(c.item,r.set,w,rp);startRest();if(r.set+1<c.item.sets.length){r.set++}status.textContent='Подход выполнен';persist();render()});
+function render(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex],s=item.sets[r.set];root.querySelectorAll('[data-routine]').forEach(b=>b.classList.toggle('active',b.dataset.routine===R));meta.textContent=`${r.ex+1}/${P[R].length} · подход ${r.set+1}/${p.sets}`;name.textContent=p.name;plan.textContent=p.plan;warm.textContent=p.warm||'';warm.style.display=p.warm?'block':'none';const tipDetails=$('#tipDetails');if(tipDetails)tipDetails.hidden=!p.warm;repLabel.textContent=p.label||'Повторы';weightLabel.textContent=IS_GYM&&p.bodyweight?'Доп. вес, кг':'Вес, кг';tabs.innerHTML='';item.sets.forEach((st,i)=>{const b=document.createElement('button');b.type='button';b.className='setbtn'+(i===r.set?' active':'');b.textContent=(st.done?'✓':'')+(i+1);b.addEventListener('click',()=>{saveFields();r.set=i;r.edit=st.done;persist();render()});tabs.appendChild(b)});weight.value=(!IS_GYM&&p.unit==='divisions'&&s.weightUnit!=='kg')?'':(s.weight||'');weight.placeholder=(!IS_GYM&&p.unit==='divisions'&&s.weightUnit!=='kg')?'Введите кг':'—';reps.value=s.reps||'';rir.value=item.rir||'';tech.value=item.tech||'';note.value=item.note||'';done.textContent=r.edit?'Сохранить':'✓ Готово';$('#prev').disabled=r.ex===0;$('#next').disabled=r.ex===P[R].length-1;$('#prev').classList.toggle('disabled',r.ex===0);$('#next').classList.toggle('disabled',r.ex===P[R].length-1);tick();syncLifecycleUI();syncEditedBadge();renderWarmup();}
+$('#setForm').addEventListener('submit',e=>{e.preventDefault();unlockSound();const r=S[R],c=cur(),w=weight.value.trim().replace(',','.'),rp=reps.value.trim();if(w&&(!Number.isFinite(Number(w))||Number(w)<0)){status.textContent='Проверь вес';weight.focus();return}if(rp&&(!Number.isFinite(Number(rp))||Number(rp)<0)){status.textContent='Проверь значение';reps.focus();return}const keepLegacyCompleted=r.edit&&!IS_GYM&&c.p.unit==='divisions'&&c.set.weightUnit!=='kg'&&w==='';if(keepLegacyCompleted){c.set.weightUnit='divisions';}else{if(!IS_GYM&&c.p.unit==='divisions'){if(c.set.weightUnit!=='kg'&&c.set.weight!=='')c.set.legacyWeight=c.set.weight;c.set.weightUnit='kg';}c.set.weight=w;}c.set.reps=rp;c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();if(r.edit){c.set.done=true;r.edit=false;status.textContent='Подход сохранён';persist();render();return}if(!started||finished){status.textContent='Сначала нажми «Начать тренировку»';return}c.set.done=true;carryForwardSetValues(c.item,r.set,w,rp,c.set.weightUnit);startRest();if(r.set+1<c.item.sets.length){r.set++}status.textContent='Подход выполнен';persist();render()});
 root.querySelectorAll('[data-routine]').forEach(b=>b.addEventListener('click',()=>{
   const nextR=b.dataset.routine;
   if(nextR===R)return;
@@ -337,7 +408,7 @@ function makeSummary(){
     const item=r.items[ei],d=item.sets.map((s,i)=>({s,i})).filter(x=>x.s.done);
     if(!d.length)return;
     out.push(p.name);
-    out.push(d.map(({s,i})=>{total++;if(s.weight!==''&&s.reps!=='')return`${i+1}) ${s.weight} ${p.unit==='divisions'?'делений':'кг'} × ${s.reps}`;return`${i+1}) ${s.reps||'—'}`}).join(' · '));
+    out.push(d.map(({s,i})=>{total++;if(IS_GYM&&p.bodyweight)return`${i+1}) свой вес${s.weight!==''?' + '+s.weight+' кг':''} × ${s.reps||'—'}`;if(s.weight!==''&&s.reps!=='')return`${i+1}) ${s.weight} ${(s.weightUnit==='divisions'||(p.unit==='divisions'&&s.weightUnit!=='kg'))?'делений':'кг'} × ${s.reps}`;return`${i+1}) ${s.reps||'—'}`}).join(' · '));
     const details=[];
     if(item.rir)details.push(`RIR последнего: ${item.rir}`);
     if(item.tech)details.push(`техника: ${item.tech}`);
@@ -351,13 +422,13 @@ function makeSummary(){
   if(hard)out.push(`Самое тяжёлое упражнение: ${hard}`);
   if(pain)out.push(`Боль/дискомфорт: ${pain}`);
   out.push('');
-  out.push('Проанализируй эту тренировку в контексте программы «116 дней»: сравни с предыдущими результатами, оцени прогрессию и скажи, что менять в следующей тренировке.');
+  out.push(IS_GYM?'Проанализируй тренировку программы «Фитнес-зал»: сравни с предыдущими результатами этой программы, оцени прогрессию и безопасность техники.':'Проанализируй эту тренировку в контексте программы «116 дней»: сравни с предыдущими результатами, оцени прогрессию и скажи, что менять в следующей тренировке.');
   return out.join('\n');
 }
 function history(){try{return JSON.parse(localStorage.getItem(HISTORY))||[]}catch(e){return[]}}
 // Four-day cycle is a recommendation, not a new training routine or a history exercise.
 // A -> B -> C -> rest -> A. Rest acknowledgment is stored separately from workout data.
-const REST_MARKER='tracker116-rest-after-c-v1';
+const REST_MARKER=STORE_NAMES[PROGRAM_ID].rest;
 function syncCycleStatus(){
   const info=document.getElementById('cycleInfo');
   const complete=document.getElementById('cycleRestComplete');
@@ -406,11 +477,11 @@ function storeHistory(text){
         rir:item.rir||'',
         technique:item.tech||'',
         note:item.note||'',
-        sets:item.sets.map((s,i)=>({set:i+1,weight:s.weight,reps:s.reps,done:!!s.done}))
+        sets:item.sets.map((s,i)=>IS_GYM?({set:i+1,weight:s.weight,reps:s.reps,done:!!s.done,unit:'kg',bodyweight:!!p.bodyweight}):({set:i+1,weight:s.weight,reps:s.reps,done:!!s.done,...(s.weightUnit?{unit:s.weightUnit}:{}),...(s.legacyWeight?{legacyWeight:s.legacyWeight}:{})}))
       };
     })
   };
-  h.unshift({id:Date.now(),routine:snap.R,date:new Date(snap.finished||Date.now()).toISOString(),programVersion:snap.programVersion||PROGRAM.version,text,data:raw});
+  h.unshift({id:Date.now(),routine:snap.R,date:new Date(snap.finished||Date.now()).toISOString(),programVersion:snap.programVersion||PROGRAM.version,text,data:raw,...(IS_GYM?{programId:'gym'}:{})});
   localStorage.setItem(HISTORY,JSON.stringify(h.slice(0,100)));
   syncCycleStatus();
 }
@@ -441,10 +512,12 @@ function exportHistory(){
   try{
     const payload={
       exportedAt:new Date().toISOString(),
-      app:'116 дней',
-      appVersion:'2.2',
+      app:IS_GYM?'Фитнес-зал':'116 дней',
+      appVersion:'2.3.0',
       programVersion:PROGRAM.version,
-      history:history()
+      history:history(),
+      // Additional independent histories; legacy top-level history stays compatible.
+      programHistories:{days116:readStoredJson(STORE_NAMES['116'].history,[]),gym:readStoredJson(STORE_NAMES.gym.history,[])}
     };
     const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
@@ -517,7 +590,7 @@ function openPlanEditor(r,ei){
   const p=effectiveExercise(r,ei);
   document.getElementById('planEditorName').textContent=`${r}: ${p.name}`;
   document.getElementById('editPlanText').value=p.plan||'';
-  document.getElementById('editWeight').value=p.w??'';
+  document.getElementById('editWeight').value=(!IS_GYM&&p.unit==='divisions')?'':(p.w??'');
   document.getElementById('editSetsCount').value=p.sets||((p.t||[]).length||1);
   document.getElementById('editTargets').value=(p.t||[]).join(',');
   document.getElementById('editWarmText').value=p.warm||'';
@@ -538,27 +611,109 @@ function syncEditedBadge(){
 
 
 
+function readStoredJson(key,fallback){
+  try{const value=JSON.parse(localStorage.getItem(key));return value==null?fallback:value}catch(e){return fallback}
+}
+function snapshotProgram(id){
+  const keys=STORE_NAMES[id];
+  return {
+    overrides:readStoredJson(keys.overrides,{}),
+    history:readStoredJson(keys.history,[]),
+    state:readStoredJson(keys.state,null),
+    pending:readStoredJson(keys.pending,null),
+    warmup:readStoredJson(keys.warmup,null),
+    restMarker:localStorage.getItem(keys.rest)
+  };
+}
+function mergeHistories(current, incoming){
+  if(!Array.isArray(current)||!Array.isArray(incoming))throw new Error('Некорректная история в файле.');
+  const result=[...current];
+  const keys=new Set(current.map(x=>JSON.stringify([x.id,x.routine,x.date,x.programVersion])));
+  for(const item of incoming){
+    if(!item || typeof item!=='object'||Array.isArray(item))throw new Error('Некорректная запись истории.');
+    const key=JSON.stringify([item.id,item.routine,item.date,item.programVersion]);
+    if(!keys.has(key)){result.push(item);keys.add(key)}
+  }
+  result.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
+  return result; // Do not truncate history on backup import.
+}
+function importDualPlanBackup(data){
+  const dual=data.sporttrackerDual;
+  if(!dual || dual.schemaVersion!==1 || !dual.programs || typeof dual.programs!=='object')throw new Error('Неверный формат двух программ.');
+  const verified={};
+  for(const [id,field] of [['116','days116'],['gym','gym']]){
+    const entry=dual.programs[field];
+    if(!entry || typeof entry!=='object'||Array.isArray(entry))throw new Error('Отсутствует программа '+field);
+    const base= id==='gym'?window.PROGRAM_GYM:window.PROGRAM_116;
+    verified[id]={
+      overrides:validatePlanOverridePayload({type:'tracker116-local-plan-overrides',schemaVersion:1,overrides:entry.overrides||{}},base.routines),
+      history:entry.history||[],
+      state:entry.state??null,
+      pending:entry.pending??null,
+      warmup:entry.warmup??null,
+      restMarker:entry.restMarker??null
+    };
+    if(!Array.isArray(verified[id].history))throw new Error('История программы '+field+' повреждена');
+    if(verified[id].state!==null && (typeof verified[id].state!=='object'||Array.isArray(verified[id].state)))throw new Error('Некорректное состояние '+field);
+    if(verified[id].pending!==null && (typeof verified[id].pending!=='object'||Array.isArray(verified[id].pending)))throw new Error('Некорректная сводка '+field);
+  }
+  // Do not replace plan targets while a session or an unfinalized summary is pending.
+  for(const id of ['116','gym']){
+    const keys=STORE_NAMES[id],current=readStoredJson(keys.state,null),pending=readStoredJson(keys.pending,null);
+    if((current?.started&&!current.finished)||pending){
+      throw new Error('Заверши тренировку и сохрани сводку в обеих программах перед импортом общего архива. Данные не изменены.');
+    }
+  }
+  if(!confirm('Импортировать обе программы? Истории будут объединены, а настройки упражнений восстановлены.'))return false;
+  // Backup both current namespaces, without replacing or deleting anything else.
+  saveFields();
+  const backup={exportedAt:new Date().toISOString(),programs:{days116:snapshotProgram('116'),gym:snapshotProgram('gym')}};
+  localStorage.setItem('sporttracker-before-dual-import-'+Date.now(),JSON.stringify(backup));
+  for(const id of ['116','gym']){
+    const keys=STORE_NAMES[id],v=verified[id];
+    localStorage.setItem(keys.overrides,JSON.stringify(v.overrides));
+    localStorage.setItem(keys.history,JSON.stringify(mergeHistories(readStoredJson(keys.history,[]),v.history)));
+    // Keep any running workout intact; otherwise rebuild idle fields from imported targets.
+    const currentSession=readStoredJson(keys.state,null);
+    if(!currentSession?.started || currentSession.finished){
+      if(v.state?.started && !v.state.finished)localStorage.setItem(keys.state,JSON.stringify(v.state));
+      else localStorage.removeItem(keys.state);
+    }
+    if(!localStorage.getItem(keys.pending) && v.pending)localStorage.setItem(keys.pending,JSON.stringify(v.pending));
+    if(!localStorage.getItem(keys.warmup) && v.warmup)localStorage.setItem(keys.warmup,JSON.stringify(v.warmup));
+    if(!localStorage.getItem(keys.rest) && v.restMarker!==null)localStorage.setItem(keys.rest,String(v.restMarker));
+  }
+  location.reload();
+  return true;
+}
 function exportPlanOverridesFile(){
+  saveFields(); // Include the latest unsaved inputs of the active workout.
+  // Preserve the existing schema-1 top-level fields for old 116-day importers.
+  // The optional extension contains independent settings, history and sessions.
   const payload={
     type:'tracker116-local-plan-overrides',
     schemaVersion:1,
     exportedAt:new Date().toISOString(),
-    baseProgramVersion:PROGRAM.version||null,
-    overrides:getOverrides()
+    baseProgramVersion:window.PROGRAM_116.version||null,
+    overrides:readStoredJson(STORE_NAMES['116'].overrides,{}),
+    sporttrackerDual:{schemaVersion:1,programs:{
+      days116:snapshotProgram('116'),
+      gym:snapshotProgram('gym')
+    }}
   };
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   const stamp=new Date().toISOString().slice(0,10);
   a.href=url;
-  a.download=`tracker116-plan-overrides-${stamp}.json`;
+  a.download=`SportTracker-two-programs-${stamp}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
-function validatePlanOverridePayload(data){
+function validatePlanOverridePayload(data,catalogue=window.PROGRAM_116.routines){
   if(!data || typeof data!=='object') throw new Error('Файл не содержит JSON-объект.');
   if(data.type!=='tracker116-local-plan-overrides') throw new Error('Это не файл локальных изменений трекера 116.');
   if(data.schemaVersion!==1) throw new Error('Неподдерживаемая версия файла.');
@@ -570,7 +725,7 @@ function validatePlanOverridePayload(data){
     clean[r]={};
     for(const [k,v] of Object.entries(data.overrides[r])){
       const i=Number(k);
-      if(!Number.isInteger(i) || i<0 || !P[r] || !P[r][i]) throw new Error(`Некорректный индекс упражнения в ${r}: ${k}`);
+      if(!Number.isInteger(i) || i<0 || !catalogue[r] || !catalogue[r][i]) throw new Error(`Некорректный индекс упражнения в ${r}: ${k}`);
       if(!v || typeof v!=='object' || Array.isArray(v)) throw new Error(`Некорректные данные упражнения ${r}/${k}.`);
       const allowed={};
       if('plan' in v) allowed.plan=String(v.plan ?? '');
@@ -584,6 +739,7 @@ function validatePlanOverridePayload(data){
         allowed.t=v.t.map(Number);
       }
       if('w' in v) allowed.w=String(v.w ?? '');
+      if('unit' in v){if(v.unit!=='kg')throw new Error('Допустима только единица кг.');allowed.unit='kg';}
       if('warm' in v) allowed.warm=String(v.warm ?? '');
       clean[r][i]=allowed;
     }
@@ -598,6 +754,7 @@ function applyImportedOverrides(clean){
     if(!clean[r]) continue;
     for(const [k,ov] of Object.entries(clean[r])){
       const i=Number(k);
+      const wasLegacyDivisions=!IS_GYM&&P[r][i].unit==='divisions';
       P[r][i]={...P[r][i],...ov};
       const item=S[r]?.items?.[i];
       if(item){
@@ -608,10 +765,11 @@ function applyImportedOverrides(clean){
         for(let si=0;si<sets;si++){
           const old=oldSets[si];
           if(old && old.done){
-            rebuilt.push({...old});
+            rebuilt.push({...old,...(wasLegacyDivisions && ov.unit==='kg' && !old.weightUnit ? {weightUnit:'divisions'} : {})});
           }else{
             rebuilt.push({
               weight: ('w' in ov) ? ov.w : (old?.weight ?? P[r][i].w ?? ''),
+              ...(wasLegacyDivisions && ov.unit==='kg'?{weightUnit:'kg',legacyWeight:old?.weight||''}:{}),
               reps: targets[si] ?? old?.reps ?? 0,
               done:false
             });
@@ -630,9 +788,16 @@ async function importPlanOverridesFile(file){
   if(!file) return;
   const text=await file.text();
   const data=JSON.parse(text);
-  const clean=validatePlanOverridePayload(data);
-  applyImportedOverrides(clean);
-  status.textContent='Локальные изменения плана импортированы';
+  if(data.sporttrackerDual){importDualPlanBackup(data);return;}
+  const clean=validatePlanOverridePayload(data,window.PROGRAM_116.routines);
+  if(IS_GYM){
+    // Imported legacy files are *always* for 116 days, never fitness-gym exercises.
+    localStorage.setItem(STORE_NAMES['116'].overrides,JSON.stringify(clean));
+    status.textContent='Локальный план «116 дней» импортирован отдельно от «Фитнес-зала»';
+  }else{
+    applyImportedOverrides(clean);
+    status.textContent='Локальные изменения плана импортированы';
+  }
 }
 
 window.importPlanOverridesFile = importPlanOverridesFile;
@@ -660,9 +825,11 @@ document.addEventListener('click',function(e){
     if(!targets.length) targets=Array.from({length:sets},()=>0);
     if(targets.length<sets) targets=targets.concat(Array.from({length:sets-targets.length},()=>targets[targets.length-1]||0));
     if(targets.length>sets) targets=targets.slice(0,sets);
+    const hadLegacyDivisions=!IS_GYM&&P[editorRoutine][editorExercise].unit==='divisions';
     const ov={plan:q('editPlanText').value.trim(),sets,t:targets,warm:q('editWarmText').value.trim()};
     const weight=q('editWeight').value.trim();
-    if(weight!=='')ov.w=weight;
+    if(IS_GYM || weight!=='')ov.w=weight;
+    if(hadLegacyDivisions && weight!=='')ov.unit='kg';
     const all=getOverrides();
     all[editorRoutine]=all[editorRoutine]||{};
     all[editorRoutine][editorExercise]=ov;
@@ -676,10 +843,11 @@ document.addEventListener('click',function(e){
         const old=oldSets[i];
         // Уже выполненные подходы сохраняем как факт тренировки.
         if(old && old.done){
-          rebuilt.push({...old});
+          rebuilt.push({...old,...(hadLegacyDivisions && ov.unit==='kg' && !old.weightUnit ? {weightUnit:'divisions'} : {})});
         }else{
           rebuilt.push({
-            weight: weight!=='' ? weight : (old?.weight ?? ''),
+            weight: (IS_GYM || weight!=='') ? weight : (old?.weight ?? ''),
+            ...(ov.unit==='kg'?{weightUnit:'kg',legacyWeight:old?.weight||''}:{}),
             reps: targets[i] ?? (old?.reps ?? 0),
             done:false
           });
@@ -848,7 +1016,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 // --- PWA update controls v1.3 ---
-const TRACKER_APP_VERSION = '2.2.1';
+const TRACKER_APP_VERSION = '2.3.0';
 
 async function forceTrackerUpdate() {
   const btn = document.getElementById('trackerUpdateBtn');
