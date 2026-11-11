@@ -11,7 +11,7 @@ const P=PROGRAM.routines;
 // --- Audio overlay mode v1.6 ---
 // On supporting iOS/WebKit builds, "transient" lets a short app sound mix with
 // music from another app instead of taking over the phone's playback session.
-const restAudio = new Audio('rest-whistle-short-20261111.wav');
+const restAudio = new Audio('rest-whistle-user-20261111.mp3');
 restAudio.preload = 'auto';
 
 let previousAudioSessionType = null;

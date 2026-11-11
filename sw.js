@@ -1,9 +1,9 @@
-const CACHE = 'sporttracker-v2.3.2-safearea-shortwhistle-20261111';
+const CACHE = 'sporttracker-v2.3.3-user-whistle-20261111';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
-  './app.js?v=2.3.2-safearea-shortwhistle-20261111',
+  './app.js?v=2.3.3-user-whistle-20261111',
   './program.js?v=20261022-program',
   './gym-program.js?v=20261111-gym-v1',
   './gym-program.js',
@@ -11,7 +11,7 @@ const ASSETS = [
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
-  './rest-whistle-short-20261111.wav'
+  './rest-whistle-user-20261111.mp3'
 ];
 
 self.addEventListener('install', event => {
