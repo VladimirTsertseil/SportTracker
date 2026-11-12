@@ -6,6 +6,85 @@ const IS_GYM=PROGRAM_ID==='gym';
 const PROGRAM=IS_GYM?window.PROGRAM_GYM:window.PROGRAM_116;
 if(!PROGRAM) throw new Error('Workout program is missing: '+PROGRAM_ID);
 const P=PROGRAM.routines;
+// Immutable base catalogues: customizations are stored separately for each program.
+const BASE_CATALOGUES={};
+for(const [id,source] of [['116',window.PROGRAM_116],['gym',window.PROGRAM_GYM]]){
+  BASE_CATALOGUES[id]=Object.fromEntries(['A','B','C'].map(r=>[r,source.routines[r].map(x=>({...x,t:[...(x.t||[])]}))]));
+}
+const STRUCTURE_STORAGE=IS_GYM?'tracker-gym-exercises-v1':'tracker116-exercises-v1';
+function safeCustomExercise(raw,id){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('Некорректное упражнение.');
+  const name=String(raw.name||'').trim();
+  const sets=Number(raw.sets);
+  if(!name||name.length>160||!Number.isInteger(sets)||sets<1||sets>12)throw new Error('Неверное название или число подходов.');
+  if(!Array.isArray(raw.t)||raw.t.length!==sets||raw.t.some(n=>!Number.isFinite(Number(n))||Number(n)<0))throw new Error('Некорректные целевые значения.');
+  const w=String(raw.w??'').trim();
+  if(w&&!/^\d+(?:[.,]\d+)?$/.test(w))throw new Error('Вес должен быть числом в кг.');
+  return {__id:id,name,sets,t:raw.t.map(Number),w:w.replace(',','.'),unit:'kg',
+    bodyweight:!!raw.bodyweight,label:raw.label==='Секунды'?'Секунды':'Повторы',
+    plan:String(raw.plan||'').slice(0,1000),warm:String(raw.warm||'').slice(0,1000)};
+}
+function validStructure(value,id){
+  if(value==null)return null;
+  if(!value||value.schemaVersion!==1||!value.routines||typeof value.routines!=='object')throw new Error('Некорректная структура программы.');
+  const catalogue=BASE_CATALOGUES[id];const routines={};
+  for(const r of ['A','B','C']){
+    const list=value.routines[r];
+    if(!Array.isArray(list)||list.length<1||list.length>50)throw new Error('Некорректный список упражнений '+r);
+    const seen=new Set();
+    routines[r]=list.map(entry=>{
+      if(!entry||typeof entry!=='object'||Array.isArray(entry))throw new Error('Некорректный элемент программы.');
+      if(Object.hasOwn(entry,'base')){
+        if(!Number.isInteger(entry.base)||!catalogue[r][entry.base])throw new Error('Неизвестное базовое упражнение.');
+        const key='base:'+entry.base;
+        if(seen.has(key))throw new Error('Дублирование упражнения.');seen.add(key);
+        return {base:entry.base};
+      }
+      if(typeof entry.id!=='string'||!/^custom:[a-z0-9-]{5,64}$/.test(entry.id)||seen.has(entry.id))throw new Error('Некорректный идентификатор упражнения.');
+      seen.add(entry.id);
+      const custom=safeCustomExercise(entry.exercise,entry.id);
+      const {__id,...exercise}=custom;
+      return {id:entry.id,exercise};
+    });
+  }
+  return {schemaVersion:1,routines};
+}
+function projectCatalogue(id,raw){
+  const validated=validStructure(raw,id);
+  const base=BASE_CATALOGUES[id];
+  return Object.fromEntries(['A','B','C'].map(r=>[r,
+    (validated?.routines[r]||base[r].map((_,i)=>({base:i}))).map(entry=>
+      Object.hasOwn(entry,'base')?{...base[r][entry.base],t:[...(base[r][entry.base].t||[])],__id:'base:'+entry.base}:safeCustomExercise(entry.exercise,entry.id))
+  ]));
+}
+function useStoredStructure(){
+  let raw=null;try{raw=JSON.parse(localStorage.getItem(STRUCTURE_STORAGE)||'null')}catch(e){console.warn('exercise structure',e)}
+  try{
+    const projected=projectCatalogue(PROGRAM_ID,raw);
+    for(const r of ['A','B','C'])P[r]=projected[r];
+  }catch(e){console.error('Bad exercise structure; preserving original backup',e);const baseline=projectCatalogue(PROGRAM_ID,null);for(const r of ['A','B','C'])P[r]=baseline[r];}
+}
+function newExerciseItem(p){return {exerciseId:p.__id,rir:'',tech:'',note:'',sets:Array.from({length:p.sets},(_,i)=>({weight:(p.w??''),reps:String(p.t?.[i]??''),done:false}))};}
+function alignStateToExercises(current){
+  if(!current||!current.S)return current;
+  for(const r of ['A','B','C']){
+    if(!current.S[r]){current.S[r]={ex:0,set:0,edit:false,items:[]};}
+    const session=current.S[r];const previous=Array.isArray(session.items)?session.items:[];
+    const selected=previous[session.ex||0];const selectedId=selected?.exerciseId||'base:'+(session.ex||0);
+    const byId=new Map(previous.map((item,i)=>[item.exerciseId||'base:'+i,item]));
+    session.items=P[r].map(p=>{
+      const existing=byId.get(p.__id);
+      if(!existing||!Array.isArray(existing.sets))return newExerciseItem(p);
+      existing.exerciseId=p.__id;
+      return existing;
+    });
+    const target=P[r].findIndex(p=>p.__id===selectedId);
+    session.ex=target>=0?target:Math.min(Math.max(0,session.ex||0),P[r].length-1);
+    session.set=Math.min(Math.max(0,session.set||0),Math.max(0,session.items[session.ex].sets.length-1));
+  }
+  return current;
+}
+useStoredStructure();
 
 
 // --- Audio overlay mode v1.6 ---
@@ -133,10 +212,10 @@ const HISTORY=IS_GYM?'tracker-gym-history-v1':'tracker116-history-v1';
 const PENDING=IS_GYM?'tracker-gym-pending-finish-v1':'tracker116-pending-finish-v1';
 const SOUND_PREF='tracker116-sound-v1'; // Shared device preference; unchanged.
 const STORE_NAMES={
-  '116':{state:'tracker116-state-v1',history:'tracker116-history-v1',pending:'tracker116-pending-finish-v1',warmup:'tracker116-warmup-session-v1',rest:'tracker116-rest-after-c-v1',overrides:'tracker116-plan-overrides-v1-'+window.PROGRAM_116.version},
-  gym:{state:'tracker-gym-state-v1',history:'tracker-gym-history-v1',pending:'tracker-gym-pending-finish-v1',warmup:'tracker-gym-warmup-session-v1',rest:'tracker-gym-rest-after-c-v1',overrides:'tracker-gym-plan-overrides-v1-'+window.PROGRAM_GYM.version}
+  '116':{state:'tracker116-state-v1',history:'tracker116-history-v1',pending:'tracker116-pending-finish-v1',warmup:'tracker116-warmup-session-v1',rest:'tracker116-rest-after-c-v1',overrides:'tracker116-plan-overrides-v1-'+window.PROGRAM_116.version,structure:'tracker116-exercises-v1'},
+  gym:{state:'tracker-gym-state-v1',history:'tracker-gym-history-v1',pending:'tracker-gym-pending-finish-v1',warmup:'tracker-gym-warmup-session-v1',rest:'tracker-gym-rest-after-c-v1',overrides:'tracker-gym-plan-overrides-v1-'+window.PROGRAM_GYM.version,structure:'tracker-gym-exercises-v1'}
 };
-function mk(k){return{ex:0,set:0,edit:false,items:P[k].map(x=>({rir:'',tech:'',note:'',sets:Array.from({length:x.sets},(_,i)=>({weight:(x.w||''),reps:String(x.t[i]??''),done:false}))}))}}
+function mk(k){return{ex:0,set:0,edit:false,items:P[k].map(newExerciseItem)}}
 function fresh(){return{S:{A:mk('A'),B:mk('B'),C:mk('C')},R:(PROGRAM.nextRoutine||'A'),started:null,finished:null,restEnd:null,programVersion:PROGRAM.version}}
 function load(){try{const x=JSON.parse(localStorage.getItem(STORAGE));if(!x)return fresh();if(x.programVersion!==PROGRAM.version){if(x.started&&!x.finished){try{localStorage.setItem((IS_GYM?'tracker-gym-session-backup-':'tracker116-session-backup-')+String(x.programVersion||'unknown'),JSON.stringify(x))}catch(e){}}return fresh()}return x}catch(e){return fresh()}}
 // Load local exercise targets before building a fresh session; completed sets are never rewritten.
@@ -144,7 +223,7 @@ function load(){try{const x=JSON.parse(localStorage.getItem(STORAGE));if(!x)retu
 const LEGACY_PLAN_OVERRIDES='tracker116-plan-overrides-v1';
 const PLAN_OVERRIDES=STORE_NAMES[PROGRAM_ID].overrides;
 applyOverrideToProgram();
-let state=load(),S=state.S,R=state.R,started=state.started,finished=state.finished,restEnd=state.restEnd;
+let state=alignStateToExercises(load()),S=state.S,R=state.R,started=state.started,finished=state.finished,restEnd=state.restEnd;
 // Отметки A/B/C относятся только к текущей сессии (started — её идентификатор).
 function readWarmupSession(sessionStarted){
   if(!sessionStarted)return {A:false,B:false,C:false};
@@ -364,7 +443,7 @@ function startRest(){restSec=120;restEnd=Date.now()+120000;
   scheduleRestPush(Math.max(1,Math.round((restEnd-Date.now())/1000)));restRun=true;signaled=false;if(restControls)restControls.style.display='flex';if(!timer)timer=setInterval(tick,250);tick();persist()}
 function adjust(d){if(!restRun||!restEnd)return;restEnd=Math.max(Date.now(),restEnd+d*1000);tick();persist()}
 function skip(){if(!restRun)return;restRun=false;restEnd=null;restSec=0;rclock.textContent='00:00';rlabel.textContent='Отдых закончен';if(restControls)restControls.style.display='none';persist()}
-function render(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex],s=item.sets[r.set];root.querySelectorAll('[data-routine]').forEach(b=>b.classList.toggle('active',b.dataset.routine===R));meta.textContent=`${r.ex+1}/${P[R].length} · подход ${r.set+1}/${p.sets}`;name.textContent=p.name;plan.textContent=p.plan;warm.textContent=p.warm||'';warm.style.display=p.warm?'block':'none';const tipDetails=$('#tipDetails');if(tipDetails)tipDetails.hidden=!p.warm;repLabel.textContent=p.label||'Повторы';weightLabel.textContent=IS_GYM&&p.bodyweight?'Доп. вес, кг':'Вес, кг';tabs.innerHTML='';item.sets.forEach((st,i)=>{const b=document.createElement('button');b.type='button';b.className='setbtn'+(i===r.set?' active':'');b.textContent=(st.done?'✓':'')+(i+1);b.addEventListener('click',()=>{saveFields();r.set=i;r.edit=st.done;persist();render()});tabs.appendChild(b)});weight.value=(!IS_GYM&&p.unit==='divisions'&&s.weightUnit!=='kg')?'':(s.weight||'');weight.placeholder=(!IS_GYM&&p.unit==='divisions'&&s.weightUnit!=='kg')?'Введите кг':'—';reps.value=s.reps||'';rir.value=item.rir||'';tech.value=item.tech||'';note.value=item.note||'';done.textContent=r.edit?'Сохранить':'✓ Готово';$('#prev').disabled=r.ex===0;$('#next').disabled=r.ex===P[R].length-1;$('#prev').classList.toggle('disabled',r.ex===0);$('#next').classList.toggle('disabled',r.ex===P[R].length-1);tick();syncLifecycleUI();syncEditedBadge();renderWarmup();}
+function render(){const r=S[R],p=P[R][r.ex],item=r.items[r.ex],s=item.sets[r.set];root.querySelectorAll('[data-routine]').forEach(b=>b.classList.toggle('active',b.dataset.routine===R));meta.textContent=`${r.ex+1}/${P[R].length} · подход ${r.set+1}/${p.sets}`;name.textContent=p.name;plan.textContent=p.plan;warm.textContent=p.warm||'';warm.style.display=p.warm?'block':'none';const tipDetails=$('#tipDetails');if(tipDetails)tipDetails.hidden=!p.warm;repLabel.textContent=p.label||'Повторы';weightLabel.textContent=p.bodyweight?'Доп. вес, кг':'Вес, кг';tabs.innerHTML='';item.sets.forEach((st,i)=>{const b=document.createElement('button');b.type='button';b.className='setbtn'+(i===r.set?' active':'');b.textContent=(st.done?'✓':'')+(i+1);b.addEventListener('click',()=>{saveFields();r.set=i;r.edit=st.done;persist();render()});tabs.appendChild(b)});weight.value=(!IS_GYM&&p.unit==='divisions'&&s.weightUnit!=='kg')?'':(s.weight||'');weight.placeholder=(!IS_GYM&&p.unit==='divisions'&&s.weightUnit!=='kg')?'Введите кг':'—';reps.value=s.reps||'';rir.value=item.rir||'';tech.value=item.tech||'';note.value=item.note||'';done.textContent=r.edit?'Сохранить':'✓ Готово';$('#prev').disabled=r.ex===0;$('#next').disabled=r.ex===P[R].length-1;$('#prev').classList.toggle('disabled',r.ex===0);$('#next').classList.toggle('disabled',r.ex===P[R].length-1);tick();syncLifecycleUI();syncEditedBadge();renderWarmup();}
 $('#setForm').addEventListener('submit',e=>{e.preventDefault();unlockSound();const r=S[R],c=cur(),w=weight.value.trim().replace(',','.'),rp=reps.value.trim();if(w&&(!Number.isFinite(Number(w))||Number(w)<0)){status.textContent='Проверь вес';weight.focus();return}if(rp&&(!Number.isFinite(Number(rp))||Number(rp)<0)){status.textContent='Проверь значение';reps.focus();return}const keepLegacyCompleted=r.edit&&!IS_GYM&&c.p.unit==='divisions'&&c.set.weightUnit!=='kg'&&w==='';if(keepLegacyCompleted){c.set.weightUnit='divisions';}else{if(!IS_GYM&&c.p.unit==='divisions'){if(c.set.weightUnit!=='kg'&&c.set.weight!=='')c.set.legacyWeight=c.set.weight;c.set.weightUnit='kg';}c.set.weight=w;}c.set.reps=rp;c.item.rir=rir.value;c.item.tech=tech.value;c.item.note=note.value.trim();if(r.edit){c.set.done=true;r.edit=false;status.textContent='Подход сохранён';persist();render();return}if(!started||finished){status.textContent='Сначала нажми «Начать тренировку»';return}c.set.done=true;carryForwardSetValues(c.item,r.set,w,rp,c.set.weightUnit);startRest();if(r.set+1<c.item.sets.length){r.set++}status.textContent='Подход выполнен';persist();render()});
 root.querySelectorAll('[data-routine]').forEach(b=>b.addEventListener('click',()=>{
   const nextR=b.dataset.routine;
@@ -408,7 +487,7 @@ function makeSummary(){
     const item=r.items[ei],d=item.sets.map((s,i)=>({s,i})).filter(x=>x.s.done);
     if(!d.length)return;
     out.push(p.name);
-    out.push(d.map(({s,i})=>{total++;if(IS_GYM&&p.bodyweight)return`${i+1}) свой вес${s.weight!==''?' + '+s.weight+' кг':''} × ${s.reps||'—'}`;if(s.weight!==''&&s.reps!=='')return`${i+1}) ${s.weight} ${(s.weightUnit==='divisions'||(p.unit==='divisions'&&s.weightUnit!=='kg'))?'делений':'кг'} × ${s.reps}`;return`${i+1}) ${s.reps||'—'}`}).join(' · '));
+    out.push(d.map(({s,i})=>{total++;if(p.bodyweight)return`${i+1}) свой вес${s.weight!==''?' + '+s.weight+' кг':''} × ${s.reps||'—'}`;if(s.weight!==''&&s.reps!=='')return`${i+1}) ${s.weight} ${(s.weightUnit==='divisions'||(p.unit==='divisions'&&s.weightUnit!=='kg'))?'делений':'кг'} × ${s.reps}`;return`${i+1}) ${s.reps||'—'}`}).join(' · '));
     const details=[];
     if(item.rir)details.push(`RIR последнего: ${item.rir}`);
     if(item.tech)details.push(`техника: ${item.tech}`);
@@ -585,8 +664,102 @@ function applyOverrideToProgram(){
   });
 }
 
+
+// Exercise list editor (settings only). IDs prevent a removed item from shifting
+// the results of neighbouring exercises. Completed history is never rewritten.
+let managerOpen=false,managerRoutine='A',editorIsAdding=false;
+const managerPanel=document.getElementById('exerciseManager');
+const editFields=document.getElementById('exerciseEditFields');
+function canModifyExerciseList(){
+  if(started&&!finished || pendingFinish){
+    alert('Сначала заверши тренировку и сохрани итоговую сводку. История при изменении списка не пострадает.');
+    return false;
+  }
+  return true;
+}
+function storeStructure(){
+  const result={schemaVersion:1,routines:{}};
+  for(const r of ['A','B','C']){
+    result.routines[r]=P[r].map(p=>{
+      if(p.__id.startsWith('base:'))return {base:Number(p.__id.slice(5))};
+      const {__id,...exercise}=p;
+      return {id:p.__id,exercise:{name:exercise.name,sets:exercise.sets,t:exercise.t,w:exercise.w,
+        bodyweight:!!exercise.bodyweight,label:exercise.label||'Повторы',plan:exercise.plan||'',warm:exercise.warm||''}};
+    });
+  }
+  localStorage.setItem(STRUCTURE_STORAGE,JSON.stringify(result));
+}
+function managerMessage(message){document.getElementById('exerciseManagerMessage').textContent=message;}
+function renderExerciseManager(){
+  document.getElementById('manageRoutine').value=managerRoutine;
+  const list=document.getElementById('exerciseManagerList');list.replaceChildren();
+  P[managerRoutine].forEach((p,i)=>{
+    const row=document.createElement('div');row.className='exercise-manager-row';
+    const name=document.createElement('span');name.className='exercise-manager-name';name.textContent=`${i+1}. ${p.name}`;
+    const edit=document.createElement('button');edit.type='button';edit.textContent='Изменить';edit.dataset.manageEdit=String(i);
+    const del=document.createElement('button');del.type='button';del.textContent='Удалить';del.dataset.manageDelete=String(i);
+    row.append(name,edit,del);list.append(row);
+  });
+}
+function openPlanManager(){
+  managerOpen=true;editorIsAdding=false;managerRoutine=R;editorRoutine=null;editorExercise=null;
+  document.getElementById('planEditorHeading').textContent='Изменение программы';
+  managerPanel.classList.remove('hidden');editFields.classList.add('hidden');
+  managerMessage('');renderExerciseManager();
+  document.getElementById('planEditorModal').classList.remove('hidden');
+}
+function showExistingManagerExercise(index){
+  if(!P[managerRoutine][index])return;
+  openPlanEditor(managerRoutine,index);
+  managerPanel.classList.remove('hidden');
+  managerMessage('');
+}
+function addManagerExercise(){
+  if(!canModifyExerciseList())return;
+  if(P[managerRoutine].length>=50){managerMessage('Максимум 50 упражнений в тренировке.');return;}
+  editorRoutine=managerRoutine;editorExercise=null;editorIsAdding=true;
+  editFields.classList.remove('hidden');
+  document.getElementById('resetPlanEdit').classList.add('hidden');
+  document.getElementById('planEditorName').textContent='Новое упражнение · тренировка '+managerRoutine;
+  for(const id of ['editExerciseName','editPlanText','editWeight','editWarmText'])document.getElementById(id).value='';
+  document.getElementById('editSetsCount').value='3';
+  document.getElementById('editTargets').value='10,10,10';
+  document.getElementById('editNewGoal').value='Повторы';
+  document.getElementById('editNewBodyweight').checked=false;
+  document.getElementById('editNewOptions').classList.remove('hidden');
+  managerMessage('Заполни название, вес и подходы, затем нажми «Сохранить».');
+  document.getElementById('editExerciseName').focus();
+}
+function removeManagerExercise(index){
+  if(!canModifyExerciseList())return;
+  const r=managerRoutine,p=P[r][index];
+  if(!p)return;
+  if(P[r].length<=1){managerMessage('Нельзя удалить последнее упражнение в тренировке.');return;}
+  if(!confirm(`Удалить «${p.name}» из тренировки ${r}? Завершённая история сохранится.`))return;
+  if(R===r)saveFields();
+  P[r].splice(index,1);S[r].items.splice(index,1);
+  if(S[r].ex>index)S[r].ex--;
+  else if(S[r].ex>=P[r].length)S[r].ex=P[r].length-1;
+  S[r].set=Math.min(S[r].set,Math.max(0,S[r].items[S[r].ex].sets.length-1));
+  S[r].edit=false;
+  const overrides=getOverrides(),prior=overrides[r]||{},next={};
+  for(const [k,entry] of Object.entries(prior)){
+    const n=Number(k);if(n===index)continue;
+    next[n>index?n-1:n]=entry;
+  }
+  if(Object.keys(next).length)overrides[r]=next;else delete overrides[r];
+  setOverrides(overrides);storeStructure();persist();
+  editorRoutine=null;editorExercise=null;editorIsAdding=false;editFields.classList.add('hidden');
+  renderExerciseManager();render();managerMessage('Упражнение удалено из плана. Старая история сохранена.');
+}
+
 function openPlanEditor(r,ei){
-  editorRoutine=r; editorExercise=ei;
+  editorRoutine=r; editorExercise=ei; editorIsAdding=false;
+  if(!managerOpen)document.getElementById('planEditorHeading').textContent='Редактировать упражнение';
+  document.getElementById('exerciseEditFields').classList.remove('hidden');
+  document.getElementById('resetPlanEdit').classList.remove('hidden');
+  document.getElementById('editNewOptions').classList.add('hidden');
+  if(!managerOpen)managerPanel.classList.add('hidden');
   const p=effectiveExercise(r,ei);
   document.getElementById('planEditorName').textContent=`${r}: ${p.name}`;
   document.getElementById('editExerciseName').value=p.name||'';
@@ -597,8 +770,8 @@ function openPlanEditor(r,ei){
   document.getElementById('editWarmText').value=p.warm||'';
   document.getElementById('planEditorModal').classList.remove('hidden');
 }
-function closePlanEditor(){document.getElementById('planEditorModal').classList.add('hidden')}
-$('#settingsPlanBtn').addEventListener('click',()=>{closeSettings();openPlanEditor(R,S[R].ex);$('#planDataDetails').open=true;});
+function closePlanEditor(){document.getElementById('planEditorModal').classList.add('hidden');managerOpen=false;editorIsAdding=false;managerPanel.classList.add('hidden')}
+$('#settingsPlanBtn').addEventListener('click',()=>{closeSettings();openPlanManager();});
 function syncEditedBadge(){
   const badge=$('#editedBadge');
   if(!badge)return;
@@ -619,6 +792,7 @@ function snapshotProgram(id){
   const keys=STORE_NAMES[id];
   return {
     overrides:readStoredJson(keys.overrides,{}),
+    structure:readStoredJson(keys.structure,null),
     history:readStoredJson(keys.history,[]),
     state:readStoredJson(keys.state,null),
     pending:readStoredJson(keys.pending,null),
@@ -646,8 +820,11 @@ function importDualPlanBackup(data){
     const entry=dual.programs[field];
     if(!entry || typeof entry!=='object'||Array.isArray(entry))throw new Error('Отсутствует программа '+field);
     const base= id==='gym'?window.PROGRAM_GYM:window.PROGRAM_116;
+    const structure=validStructure(entry.structure??null,id);
+    const catalogue=projectCatalogue(id,structure);
     verified[id]={
-      overrides:validatePlanOverridePayload({type:'tracker116-local-plan-overrides',schemaVersion:1,overrides:entry.overrides||{}},base.routines),
+      structure,
+      overrides:validatePlanOverridePayload({type:'tracker116-local-plan-overrides',schemaVersion:1,overrides:entry.overrides||{}},catalogue),
       history:entry.history||[],
       state:entry.state??null,
       pending:entry.pending??null,
@@ -672,6 +849,7 @@ function importDualPlanBackup(data){
   localStorage.setItem('sporttracker-before-dual-import-'+Date.now(),JSON.stringify(backup));
   for(const id of ['116','gym']){
     const keys=STORE_NAMES[id],v=verified[id];
+    if(v.structure)localStorage.setItem(keys.structure,JSON.stringify(v.structure));else localStorage.removeItem(keys.structure);
     localStorage.setItem(keys.overrides,JSON.stringify(v.overrides));
     localStorage.setItem(keys.history,JSON.stringify(mergeHistories(readStoredJson(keys.history,[]),v.history)));
     // Keep any running workout intact; otherwise rebuild idle fields from imported targets.
@@ -794,7 +972,28 @@ async function importPlanOverridesFile(file){
   const text=await file.text();
   const data=JSON.parse(text);
   if(data.sporttrackerDual){importDualPlanBackup(data);return;}
-  const clean=validatePlanOverridePayload(data,window.PROGRAM_116.routines);
+  const cleanBase=validatePlanOverridePayload(data,BASE_CATALOGUES['116']);
+  const structure=readStoredJson(STORE_NAMES['116'].structure,null);
+  let clean=cleanBase;
+  if(structure){
+    // Old JSON indexes refer to *base* exercises, not to newly shifted positions.
+    const catalogue=projectCatalogue('116',structure),mapped={};
+    for(const r of ['A','B','C']){
+      const preserved=readStoredJson(STORE_NAMES['116'].overrides,{})[r]||{};
+      const next={...preserved};
+      for(let i=0;i<catalogue[r].length;i++){
+        const id=catalogue[r][i].__id;
+        if(id.startsWith('base:')){
+          const original=Number(id.slice(5));
+          if(cleanBase[r]?.[original]){
+            next[i]=cleanBase[r][original];
+          }
+        }
+      }
+      if(Object.keys(next).length)mapped[r]=next;
+    }
+    clean=mapped;
+  }
   if(IS_GYM){
     // Imported legacy files are *always* for 116 days, never fitness-gym exercises.
     localStorage.setItem(STORE_NAMES['116'].overrides,JSON.stringify(clean));
@@ -807,12 +1006,23 @@ async function importPlanOverridesFile(file){
 
 window.importPlanOverridesFile = importPlanOverridesFile;
 
+document.getElementById('manageRoutine').addEventListener('change',e=>{
+  managerRoutine=e.target.value;editorIsAdding=false;editorRoutine=null;editorExercise=null;
+  editFields.classList.add('hidden');renderExerciseManager();managerMessage('');
+});
+document.getElementById('exerciseManagerList').addEventListener('click',e=>{
+  const edit=e.target.closest('[data-manage-edit]');
+  if(edit){showExistingManagerExercise(Number(edit.dataset.manageEdit));return;}
+  const del=e.target.closest('[data-manage-delete]');
+  if(del)removeManagerExercise(Number(del.dataset.manageDelete));
+});
+document.getElementById('addExerciseBtn').addEventListener('click',addManagerExercise);
 document.addEventListener('click',function(e){
   const edit=e.target.closest('#editPlanBtn');
   if(edit){
     e.preventDefault();
     e.stopPropagation();
-    openPlanEditor(R,S[R].ex);
+    managerOpen=false;openPlanEditor(R,S[R].ex);
     return;
   }
   if(e.target.closest('#closePlanEditor')){
@@ -823,16 +1033,32 @@ document.addEventListener('click',function(e){
   }
   if(e.target.closest('#savePlanEdit')){
     e.preventDefault();
-    if(editorRoutine==null||editorExercise==null)return;
+    if(editorRoutine==null||(!editorIsAdding&&editorExercise==null))return;
+    if(editorIsAdding&&!canModifyExerciseList())return;
     const q=id=>document.getElementById(id);
     const sets=Math.max(1,Math.min(12,Number(q('editSetsCount').value)||1));
     let targets=q('editTargets').value.split(',').map(x=>x.trim()).filter(Boolean).map(Number).filter(Number.isFinite);
     if(!targets.length) targets=Array.from({length:sets},()=>0);
     if(targets.length<sets) targets=targets.concat(Array.from({length:sets-targets.length},()=>targets[targets.length-1]||0));
     if(targets.length>sets) targets=targets.slice(0,sets);
-    const hadLegacyDivisions=!IS_GYM&&P[editorRoutine][editorExercise].unit==='divisions';
     const editedName=q('editExerciseName').value.trim();
-    if(!editedName){status.textContent='Название упражнения не может быть пустым';q('editExerciseName').focus();return;}
+    if(!editedName){managerMessage('Название упражнения не может быть пустым');q('editExerciseName').focus();return;}
+    if(editorIsAdding){
+      const rawW=q('editWeight').value.trim();
+      if(rawW&&!/^\d+(?:[.,]\d+)?$/.test(rawW)){managerMessage('Укажи вес числом в килограммах или оставь поле пустым.');return;}
+      if(targets.some(n=>n<0)){managerMessage('Число повторений или секунд не может быть отрицательным.');return;}
+      const id='custom:'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+      const p=safeCustomExercise({name:editedName,sets,t:targets,w:rawW,plan:'',warm:'',
+        label:q('editNewGoal').value,bodyweight:q('editNewBodyweight').checked},id);
+      P[editorRoutine].push(p);
+      S[editorRoutine].items.push(newExerciseItem(p));
+      storeStructure();persist();render();
+      editorIsAdding=false;editorExercise=P[editorRoutine].length-1;
+      editFields.classList.add('hidden');renderExerciseManager();
+      managerMessage('«'+editedName+'» добавлено в тренировку '+editorRoutine+'.');
+      return;
+    }
+    const hadLegacyDivisions=!IS_GYM&&P[editorRoutine][editorExercise].unit==='divisions';
     const prior=overrideFor(editorRoutine,editorExercise)||{};
     const ov={...prior,name:editedName,plan:q('editPlanText').value.trim(),sets,t:targets,warm:q('editWarmText').value.trim()};
     const weight=q('editWeight').value.trim();
@@ -866,7 +1092,9 @@ document.addEventListener('click',function(e){
       // переносим его на последний доступный подход.
       if(item.set>=sets)item.set=Math.max(0,sets-1);
     }
-    persist(); closePlanEditor(); render();
+    persist();render();
+    if(managerOpen){editFields.classList.add('hidden');renderExerciseManager();managerMessage('Упражнение изменено.');}
+    else closePlanEditor();
     status.textContent='План упражнения обновлён локально';
     return;
   }
@@ -884,7 +1112,9 @@ document.addEventListener('click',function(e){
   }
   if(e.target.closest('#resetAllPlanOverrides')){
     e.preventDefault();
-    if(confirm('Сбросить все локальные изменения плана A/B/C? Каноническая программа program.js останется без изменений.')){
+    if(!canModifyExerciseList())return;
+    if(confirm('Вернуть исходный список упражнений и сбросить локальные изменения A/B/C? Завершённая история останется.')){
+      localStorage.removeItem(STRUCTURE_STORAGE);
       localStorage.removeItem(PLAN_OVERRIDES);
       location.reload();
     }
