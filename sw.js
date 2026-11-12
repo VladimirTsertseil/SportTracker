@@ -1,9 +1,9 @@
-const CACHE = 'sporttracker-v2.3.3-user-whistle-20261111';
+const CACHE = 'sporttracker-v2.3.4-compact-name-edit-20261112';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
-  './app.js?v=2.3.3-user-whistle-20261111',
+  './app.js?v=2.3.4-compact-name-edit-20261112',
   './program.js?v=20261022-program',
   './gym-program.js?v=20261111-gym-v1',
   './gym-program.js',

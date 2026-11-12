@@ -589,6 +589,7 @@ function openPlanEditor(r,ei){
   editorRoutine=r; editorExercise=ei;
   const p=effectiveExercise(r,ei);
   document.getElementById('planEditorName').textContent=`${r}: ${p.name}`;
+  document.getElementById('editExerciseName').value=p.name||'';
   document.getElementById('editPlanText').value=p.plan||'';
   document.getElementById('editWeight').value=(!IS_GYM&&p.unit==='divisions')?'':(p.w??'');
   document.getElementById('editSetsCount').value=p.sets||((p.t||[]).length||1);
@@ -728,6 +729,10 @@ function validatePlanOverridePayload(data,catalogue=window.PROGRAM_116.routines)
       if(!Number.isInteger(i) || i<0 || !catalogue[r] || !catalogue[r][i]) throw new Error(`Некорректный индекс упражнения в ${r}: ${k}`);
       if(!v || typeof v!=='object' || Array.isArray(v)) throw new Error(`Некорректные данные упражнения ${r}/${k}.`);
       const allowed={};
+      if('name' in v){
+        if(typeof v.name!=='string' || !v.name.trim() || v.name.length>160) throw new Error(`Некорректное название упражнения в ${r}/${k}.`);
+        allowed.name=v.name.trim();
+      }
       if('plan' in v) allowed.plan=String(v.plan ?? '');
       if('sets' in v){
         const sets=Number(v.sets);
@@ -826,7 +831,10 @@ document.addEventListener('click',function(e){
     if(targets.length<sets) targets=targets.concat(Array.from({length:sets-targets.length},()=>targets[targets.length-1]||0));
     if(targets.length>sets) targets=targets.slice(0,sets);
     const hadLegacyDivisions=!IS_GYM&&P[editorRoutine][editorExercise].unit==='divisions';
-    const ov={plan:q('editPlanText').value.trim(),sets,t:targets,warm:q('editWarmText').value.trim()};
+    const editedName=q('editExerciseName').value.trim();
+    if(!editedName){status.textContent='Название упражнения не может быть пустым';q('editExerciseName').focus();return;}
+    const prior=overrideFor(editorRoutine,editorExercise)||{};
+    const ov={...prior,name:editedName,plan:q('editPlanText').value.trim(),sets,t:targets,warm:q('editWarmText').value.trim()};
     const weight=q('editWeight').value.trim();
     if(IS_GYM || weight!=='')ov.w=weight;
     if(hadLegacyDivisions && weight!=='')ov.unit='kg';

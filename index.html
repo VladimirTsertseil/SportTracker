@@ -101,6 +101,12 @@ input,select{min-height:44px}.done{background:linear-gradient(90deg,#177fe6,#249
 .install-note{color:#8999ab}
 @media(max-width:400px){.name{font-size:19px}.card{padding:11px}.rest-wrap{min-width:82px;padding:6px}.rest-wrap .timer{font-size:21px}.topbar{gap:4px}.time-box{min-width:105px}.routines button{min-width:42px}.grid2{gap:8px}.note-row{gap:6px}}
 
+/* Hide non-essential workout hints without deleting existing data or handlers. */
+#editedBadge,#plan,#tipDetails,#warmupDetails{display:none!important}
+/* Keep the pencil and the rest timer on one aligned horizontal row. */
+.head-actions{display:flex;align-items:center;gap:8px;align-self:start;flex-shrink:0}
+.head-actions .plan-edit-btn{flex:0 0 42px;width:42px;height:42px;min-height:42px;display:grid;place-items:center;margin:0;padding:0}
+.head-actions .rest-wrap{margin:0}
 </style>
 
 <style>
@@ -125,7 +131,7 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
   </div>
 </div>
 <div class="start-row"><button id="startWorkout" type="button">▶ Начать тренировку</button></div>
-<details id="warmupDetails" class="warmup-panel">
+<details id="warmupDetails" class="warmup-panel" hidden aria-hidden="true" inert>
   <summary aria-label="Развернуть или свернуть разминку">
     <span class="warmup-title" id="warmupTitle">Разминка · 10–12 мин</span>
     <span class="warmup-state hidden" id="warmupState">✓ Разминка выполнена</span>
@@ -146,16 +152,16 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
 <section class="card">
 <div class="head">
   <div>
-  <div id="meta" class="meta"></div>
-  <div style="display:flex;align-items:flex-start;gap:8px">
-    <div id="name" class="name" style="flex:1"></div>
-    <button id="editPlanBtn" class="plan-edit-btn" type="button" title="Редактировать план">✎</button>
+    <div id="meta" class="meta"></div>
+    <div id="name" class="name"></div>
+    <div id="editedBadge" class="edited-badge hidden">изменено локально</div>
+    <div id="plan" class="plan"></div>
+    <details id="tipDetails" class="tip-details"><summary>Техника и рекомендации</summary><div id="warm" class="warm"></div></details>
   </div>
-  <div id="editedBadge" class="edited-badge hidden">изменено локально</div>
-  <div id="plan" class="plan"></div>
-  <details id="tipDetails" class="tip-details"><summary>Техника и рекомендации</summary><div id="warm" class="warm"></div></details>
-</div>
-  <div class="rest-wrap"><div class="meta">Отдых</div><div id="restClock" class="timer">02:00</div></div>
+  <div class="head-actions">
+    <button id="editPlanBtn" class="plan-edit-btn" type="button" title="Редактировать упражнение" aria-label="Редактировать упражнение">✎</button>
+    <div class="rest-wrap"><div class="meta">Отдых</div><div id="restClock" class="timer">02:00</div></div>
+  </div>
 </div>
 <div id="tabs" class="sets"></div>
 <form id="setForm" class="form">
@@ -195,7 +201,7 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
       <div id="cycleInfo">Цикл A → B → C → отдых</div>
       <button id="cycleRestComplete" class="hidden" type="button">Отметить день отдыха завершённым</button>
       <div id="version"></div>
-      <div id="appVersionLabel">v2.3.2</div>
+      <div id="appVersionLabel">v2.3.4</div>
     </div>
   </div>
 </div>
@@ -206,7 +212,10 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
       <button id="closePlanEditor" type="button">Закрыть</button>
     </div>
     <div id="planEditorName" style="font-weight:700;margin-bottom:10px"></div>
-    <label>План / описание
+    <label>Название упражнения
+      <input id="editExerciseName" maxlength="160" autocomplete="off">
+    </label>
+    <label style="display:none" aria-hidden="true">План / описание
       <textarea id="editPlanText" rows="3"></textarea>
     </label>
     <label>Вес в кг (для своего веса — дополнительный)
@@ -218,7 +227,7 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
     <label>Повторы / секунды по подходам
       <input id="editTargets" placeholder="например 5,5,5,5">
     </label>
-    <label>Подсказка / примечание
+    <label style="display:none" aria-hidden="true">Подсказка / примечание
       <textarea id="editWarmText" rows="4"></textarea>
     </label>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
@@ -242,7 +251,7 @@ button.disabled,button:disabled{opacity:.45;pointer-events:none}
 <script src="program.js?v=20261022-program"></script>
 <script src="gym-program.js?v=20261111-gym-v1"></script>
 <script src="push-config.js?v=2.0"></script>
-<script src="app.js?v=2.3.3-user-whistle-20261111"></script>
+<script src="app.js?v=2.3.4-compact-name-edit-20261112"></script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js', {updateViaCache:'none'}).catch(()=>{}));}</script>
 
 
